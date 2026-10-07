@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Tarisira",
+    "slug": "tarisira",
+    "scheme": "tarisira",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      "expo-sharing",
+      "expo-secure-store"
+    ],
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {},
+    "web": {}
+  }
+}

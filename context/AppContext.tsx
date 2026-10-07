@@ -94,16 +94,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
 
   useEffect(() => {
-    if (!supabase) return;
+    const client = supabase;
+    if (!client) return;
     let alive = true;
-    supabase.auth.getSession().then(({ data, error }) => {
+    client.auth.getSession().then(({ data, error }) => {
       if (error) console.warn('Could not restore Supabase session:', error.message);
       if (alive) {
         setSession(data.session);
         setAuthLoading(false);
       }
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = client.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setAuthLoading(false);
     });
@@ -114,7 +115,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!supabase || !session?.user.id) {
+    const client = supabase;
+    if (!client || !session?.user.id) {
       setLoadedUserId(null);
       return;
     }
@@ -122,7 +124,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const userId = session.user.id;
     const load = async () => {
       setAuthLoading(true);
-      const { data, error } = await supabase.from('app_state').select('data').eq('user_id', userId).maybeSingle();
+      const { data, error } = await client.from('app_state').select('data').eq('user_id', userId).maybeSingle();
       if (!alive) return;
       if (error) {
         console.warn('Could not load saved app state:', error.message);
@@ -200,9 +202,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     reminders,
   }), [lang, form, products, debtors, txs, reminders]);
   useEffect(() => {
-    if (!supabase || !session?.user.id || loadedUserId !== session.user.id) return;
+    const client = supabase;
+    if (!client || !session?.user.id || loadedUserId !== session.user.id) return;
     const timeout = setTimeout(() => {
-      void supabase.from('app_state').upsert({
+      void client.from('app_state').upsert({
         user_id: session.user.id,
         data: appState,
         updated_at: new Date().toISOString(),

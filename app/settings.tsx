@@ -12,7 +12,7 @@ type Row = { icon: React.ComponentProps<typeof AppIcon>['name']; label: string; 
 const soon = () => Alert.alert('Coming soon', 'This page is not built yet.');
 
 export default function Settings() {
-  const { form, lang } = useApp();
+  const { form, lang, signOut, backendConfigured } = useApp();
   const insets = useSafeAreaInsets();
 
   const groups: Row[][] = [
@@ -33,7 +33,14 @@ export default function Settings() {
   const logout = () =>
     Alert.alert('Log out?', 'You will need to sign in again.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Log Out', style: 'destructive', onPress: () => router.replace('/login') },
+      { text: 'Log Out', style: 'destructive', onPress: async () => {
+        try {
+          if (backendConfigured) await signOut();
+          router.replace('/login');
+        } catch (error) {
+          Alert.alert('Log out failed', error instanceof Error ? error.message : 'Please try again.');
+        }
+      } },
     ]);
 
   return (

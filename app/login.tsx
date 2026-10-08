@@ -19,8 +19,8 @@ export default function Login() {
     }
     setBusy(true);
     try {
-      await signIn(identifier, password);
-      router.replace('/home');
+      const hasBusiness = await signIn(identifier, password);
+      router.replace(hasBusiness ? '/home' : '/business');
     } catch (error) {
       Alert.alert(t.login, error instanceof Error ? error.message : 'Unable to sign in.');
     } finally {

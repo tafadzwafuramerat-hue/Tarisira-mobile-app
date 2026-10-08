@@ -13,10 +13,10 @@ export default function CreateReminder() {
   const { debtorId } = useLocalSearchParams<{ debtorId?: string }>();
   const { debtors, form, addReminder } = useApp();
   const [open, setOpen] = useState(false);
-  const [did, setDid] = useState<number | undefined>(debtorId ? Number(debtorId) : debtors[0]?.id);
+  const [did, setDid] = useState<string | number | undefined>(debtorId ?? debtors[0]?.id);
   const [sendOn, setSendOn] = useState<SendOn>('Tomorrow');
 
-  const d = debtors.find((x) => x.id === did);
+  const d = debtors.find((x) => String(x.id) === String(did));
   const bizName = form.bizName || 'your business';
   const message = d
     ? `Hello ${d.name}, this is a friendly reminder that you have an outstanding balance of $${d.amount} with ${bizName}. Kindly settle at your earliest convenience. Thank you!`

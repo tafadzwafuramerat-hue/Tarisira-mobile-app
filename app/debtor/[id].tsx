@@ -17,6 +17,7 @@ export default function DebtorDetail() {
   const insets = useSafeAreaInsets();
   const d = debtors.find((x) => String(x.id) === id);
   const [amount, setAmount] = useState('');
+  const [busy, setBusy] = useState(false);
 
   if (!d) {
     return (
@@ -27,12 +28,19 @@ export default function DebtorDetail() {
     );
   }
 
-  const pay = () => {
+  const pay = async () => {
     const n = parseFloat(amount);
     if (!(n > 0)) return Alert.alert('Enter an amount', 'Enter how much was paid.');
-    recordPayment(d.id, Math.min(n, d.amount));
-    setAmount('');
-    if (n >= d.amount) router.back();
+    setBusy(true);
+    try {
+      await recordPayment(d.id, Math.min(n, d.amount));
+      setAmount('');
+      if (n >= d.amount) router.back();
+    } catch (error) {
+      Alert.alert('Payment failed', error instanceof Error ? error.message : 'Could not record this payment.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -57,7 +65,7 @@ export default function DebtorDetail() {
           <View style={{ flex: 1 }}><Field label="Record a payment ($)" keyboardType="decimal-pad" placeholder="0.00" value={amount} onChangeText={setAmount} /></View>
         </View>
         <View style={s.actions}>
-          <Pressable style={[s.action, { backgroundColor: C.dark }]} onPress={pay}><Text style={[s.actionText, { color: '#fff' }]}>Record Payment</Text></Pressable>
+          <Pressable style={[s.action, { backgroundColor: C.dark }]} disabled={busy} onPress={() => void pay()}><Text style={[s.actionText, { color: '#fff' }]}>{busy ? 'Saving…' : 'Record Payment'}</Text></Pressable>
           <Pressable style={[s.action, s.actionOutline]} onPress={() => router.push({ pathname: '/create-reminder', params: { debtorId: d.id } })}>
             <Text style={s.actionText}>Send Reminder</Text>
           </Pressable>

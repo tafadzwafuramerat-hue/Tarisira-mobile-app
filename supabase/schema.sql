@@ -134,6 +134,7 @@ create table if not exists public.sale_items (
   sale_id uuid not null,
   product_id uuid not null,
   product_name text not null,
+  category text not null default 'Other',
   quantity integer not null check (quantity > 0),
   unit_price numeric(12,2) not null check (unit_price >= 0),
   line_total numeric(12,2) generated always as (quantity * unit_price) stored,
@@ -141,6 +142,7 @@ create table if not exists public.sale_items (
   foreign key (business_id, sale_id) references public.sales(business_id, id) on delete cascade,
   foreign key (business_id, product_id) references public.products(business_id, id) on delete restrict
 );
+alter table public.sale_items add column if not exists category text not null default 'Other';
 
 create table if not exists public.debtors (
   id uuid primary key default gen_random_uuid(),
@@ -155,6 +157,8 @@ create table if not exists public.debtors (
   updated_at timestamptz not null default now(),
   unique (business_id, id)
 );
+alter table public.debtors add column if not exists current_balance numeric(12,2) not null default 0 check (current_balance >= 0);
+alter table public.debtors add column if not exists due_in_days integer not null default 7 check (due_in_days >= 0);
 
 create table if not exists public.stock_movements (
   id uuid primary key default gen_random_uuid(),
@@ -192,6 +196,131 @@ create table if not exists public.reminders (
   created_at timestamptz not null default now(),
   foreign key (business_id, debtor_id) references public.debtors(business_id, id) on delete cascade
 );
+
+-- Atomically record one sale line and decrement its product stock.
+create or replace function public.record_business_sale(
+  target_business_id uuid,
+  target_product_id uuid,
+  sold_quantity integer,
+  customer text default null,
+  method text default 'Cash'
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  selected_product public.products%rowtype;
+  new_sale_id uuid;
+  sale_total numeric(12,2);
+begin
+  if current_user_id is null or not public.is_business_member(target_business_id) then
+    raise exception 'You do not have access to this business';
+  end if;
+  if sold_quantity <= 0 then raise exception 'Quantity must be greater than zero'; end if;
+
+  select * into selected_product
+  from public.products
+  where id = target_product_id and business_id = target_business_id
+  for update;
+  if not found then raise exception 'Product not found'; end if;
+  if selected_product.quantity < sold_quantity then raise exception 'Not enough stock'; end if;
+
+  sale_total := round(selected_product.price * sold_quantity, 2);
+  insert into public.sales (business_id, customer_name, payment_method, total, created_by)
+  values (target_business_id, nullif(trim(customer), ''), coalesce(nullif(trim(method), ''), 'Cash'), sale_total, current_user_id)
+  returning id into new_sale_id;
+
+  insert into public.sale_items (business_id, sale_id, product_id, product_name, category, quantity, unit_price)
+  values (target_business_id, new_sale_id, selected_product.id, selected_product.name, selected_product.category, sold_quantity, selected_product.price);
+
+  update public.products set quantity = quantity - sold_quantity, updated_at = now()
+  where id = selected_product.id and business_id = target_business_id;
+
+  insert into public.stock_movements (business_id, product_id, label, delta)
+  values (target_business_id, selected_product.id, 'Sale', -sold_quantity);
+
+  return new_sale_id;
+end;
+$$;
+
+create or replace function public.record_debtor_payment(
+  target_business_id uuid,
+  target_debtor_id uuid,
+  payment_amount numeric,
+  payment_note text default null,
+  method text default 'Cash'
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  new_payment_id uuid;
+begin
+  if current_user_id is null or not public.is_business_member(target_business_id) then
+    raise exception 'You do not have access to this business';
+  end if;
+  if payment_amount <= 0 then raise exception 'Payment must be greater than zero'; end if;
+
+  update public.debtors
+  set current_balance = greatest(0, current_balance - payment_amount), updated_at = now()
+  where id = target_debtor_id and business_id = target_business_id;
+  if not found then raise exception 'Debtor not found'; end if;
+
+  insert into public.debtor_payments (business_id, debtor_id, amount, payment_method, note, recorded_by)
+  values (target_business_id, target_debtor_id, payment_amount, coalesce(nullif(trim(method), ''), 'Cash'), payment_note, current_user_id)
+  returning id into new_payment_id;
+
+  return new_payment_id;
+end;
+$$;
+
+create or replace function public.adjust_business_stock(
+  target_business_id uuid,
+  target_product_id uuid,
+  stock_delta integer,
+  movement_label text
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  updated_product public.products%rowtype;
+  movement_id uuid;
+begin
+  if current_user_id is null or not public.is_business_member(target_business_id) then
+    raise exception 'You do not have access to this business';
+  end if;
+
+  update public.products
+  set quantity = quantity + stock_delta, updated_at = now()
+  where id = target_product_id and business_id = target_business_id
+    and quantity + stock_delta >= 0
+  returning * into updated_product;
+  if not found then raise exception 'Product not found or stock cannot be negative'; end if;
+
+  insert into public.stock_movements (business_id, product_id, label, delta)
+  values (target_business_id, target_product_id, movement_label, stock_delta)
+  returning id into movement_id;
+
+  return movement_id;
+end;
+$$;
+
+revoke all on function public.record_business_sale(uuid, uuid, integer, text, text) from public, anon;
+revoke all on function public.record_debtor_payment(uuid, uuid, numeric, text, text) from public, anon;
+revoke all on function public.adjust_business_stock(uuid, uuid, integer, text) from public, anon;
+grant execute on function public.record_business_sale(uuid, uuid, integer, text, text) to authenticated;
+grant execute on function public.record_debtor_payment(uuid, uuid, numeric, text, text) to authenticated;
+grant execute on function public.adjust_business_stock(uuid, uuid, integer, text) to authenticated;
 
 -- Indexes support tenant-filtered reads and reporting queries.
 create index if not exists business_members_user_idx on public.business_members(user_id, business_id);

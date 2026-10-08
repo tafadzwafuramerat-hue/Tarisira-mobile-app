@@ -15,14 +15,25 @@ export default function ProductDetail() {
   const insets = useSafeAreaInsets();
   const p = products.find((x) => String(x.id) === id);
   const [amt, setAmt] = useState(10);
+  const [busy, setBusy] = useState(false);
 
   if (!p) return null;
   const low = p.qty <= p.reorderAt;
 
-  const add = () => adjustStock(p.id, amt, 'Restock');
+  const changeStock = async (delta: number, label: string) => {
+    setBusy(true);
+    try {
+      await adjustStock(p.id, delta, label);
+    } catch (error) {
+      Alert.alert('Stock update failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = () => void changeStock(amt, 'Restock');
   const remove = () => {
     if (amt > p.qty) return Alert.alert('Too many to remove', `Only ${p.qty} in stock.`);
-    adjustStock(p.id, -amt, 'Adjustment');
+    void changeStock(-amt, 'Adjustment');
   };
 
   return (
@@ -58,8 +69,8 @@ export default function ProductDetail() {
           ))}
         </View>
         <View style={d.actions}>
-          <Pressable style={[d.action, { backgroundColor: C.dark }]} onPress={add}><Text style={[d.actionText, { color: '#fff' }]}>+ Add Stock</Text></Pressable>
-          <Pressable style={[d.action, d.actionOutline]} onPress={remove}><Text style={d.actionText}>− Remove</Text></Pressable>
+          <Pressable style={[d.action, { backgroundColor: C.dark }]} disabled={busy} onPress={add}><Text style={[d.actionText, { color: '#fff' }]}>{busy ? 'Saving…' : '+ Add Stock'}</Text></Pressable>
+          <Pressable style={[d.action, d.actionOutline]} disabled={busy} onPress={remove}><Text style={d.actionText}>− Remove</Text></Pressable>
         </View>
 
         <View style={d.history}>

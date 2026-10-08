@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { router } from 'expo-router';
 import { Button, Field, Header, Screen, s } from '../components/ui';
@@ -9,8 +9,24 @@ import { useApp } from '../context/AppContext';
 const TYPES = ['Tuckshop', 'Clothing store', 'Salon', 'Restaurant', 'Hardware', 'Other'];
 
 export default function Business() {
-  const { t, form, setForm } = useApp();
+  const { t, form, setForm, session, backendConfigured, createBusiness } = useApp();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const continueSetup = async () => {
+    if (!form.bizName || !form.location) return;
+    if (backendConfigured && session) {
+      setBusy(true);
+      try {
+        await createBusiness();
+      } catch (error) {
+        Alert.alert(t.bizTitle, error instanceof Error ? error.message : 'Could not create the business.');
+        setBusy(false);
+        return;
+      }
+      setBusy(false);
+    }
+    router.push('/business-size');
+  };
   return (
     <Screen>
       <Header step={2} title={t.bizTitle} sub={t.bizSub} />
@@ -31,7 +47,7 @@ export default function Business() {
       <View style={{ height: 16 }} />
       <Field label={t.location} placeholder="e.g. Mufakose, Harare" value={form.location} onChangeText={(v) => setForm({ location: v })} />
       <Field label={t.phone} placeholder="+263 77 123 4567" keyboardType="phone-pad" value={form.bizPhone} onChangeText={(v) => setForm({ bizPhone: v })} />
-      <Button label={t.cont} disabled={!form.bizName || !form.location} onPress={() => router.push('/business-size')} />
+      <Button label={busy ? 'Saving…' : t.cont} disabled={!form.bizName || !form.location || busy} onPress={() => void continueSetup()} />
     </Screen>
   );
 }

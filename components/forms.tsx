@@ -20,12 +20,20 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
 export function ProductForm({ onClose }: { onClose: () => void }) {
   const { addProduct } = useApp();
   const [v, setV] = useState({ name: '', cat: '', price: '', qty: '' });
+  const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof v) => (x: string) => setV({ ...v, [k]: x });
-  const save = () => {
+  const save = async () => {
     const price = parseFloat(v.price), qty = parseInt(v.qty, 10);
     if (!v.name.trim() || !(price > 0) || !(qty >= 0)) return Alert.alert('Missing details', 'Enter a name, a price and a quantity.');
-    addProduct({ name: v.name.trim(), cat: v.cat.trim() || 'Other', price, qty });
-    onClose();
+    setBusy(true);
+    try {
+      await addProduct({ name: v.name.trim(), cat: v.cat.trim() || 'Other', price, qty });
+      onClose();
+    } catch (error) {
+      Alert.alert('Product could not be saved', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <Sheet title="Add Product" onClose={onClose}>
@@ -33,7 +41,7 @@ export function ProductForm({ onClose }: { onClose: () => void }) {
       <Field label="Category" value={v.cat} onChangeText={set('cat')} placeholder="e.g. Groceries" />
       <Field label="Price per unit ($)" keyboardType="decimal-pad" value={v.price} onChangeText={set('price')} />
       <Field label="Quantity in stock" keyboardType="number-pad" value={v.qty} onChangeText={set('qty')} />
-      <Button label="Save Product" onPress={save} />
+      <Button label={busy ? 'Saving…' : 'Save Product'} disabled={busy} onPress={() => void save()} />
     </Sheet>
   );
 }
@@ -41,19 +49,27 @@ export function ProductForm({ onClose }: { onClose: () => void }) {
 export function DebtorForm({ onClose }: { onClose: () => void }) {
   const { addDebtor } = useApp();
   const [v, setV] = useState({ name: '', amount: '', days: '7' });
+  const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof v) => (x: string) => setV({ ...v, [k]: x });
-  const save = () => {
+  const save = async () => {
     const amount = parseFloat(v.amount), days = parseInt(v.days, 10);
     if (!v.name.trim() || !(amount > 0)) return Alert.alert('Missing details', 'Enter a name and the amount owed.');
-    addDebtor({ name: v.name.trim(), amount, days: days >= 0 ? days : 7 });
-    onClose();
+    setBusy(true);
+    try {
+      await addDebtor({ name: v.name.trim(), amount, days: days >= 0 ? days : 7 });
+      onClose();
+    } catch (error) {
+      Alert.alert('Debtor could not be saved', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <Sheet title="Add Debtor" onClose={onClose}>
       <Field label="Customer name" value={v.name} onChangeText={set('name')} />
       <Field label="Amount owed ($)" keyboardType="decimal-pad" value={v.amount} onChangeText={set('amount')} />
       <Field label="Due in (days)" keyboardType="number-pad" value={v.days} onChangeText={set('days')} />
-      <Button label="Save Debtor" onPress={save} />
+      <Button label={busy ? 'Saving…' : 'Save Debtor'} disabled={busy} onPress={() => void save()} />
     </Sheet>
   );
 }

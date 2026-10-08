@@ -11,12 +11,12 @@ const METHODS = ['Cash', 'Mobile Money', 'Card', 'Credit'];
 export default function RecordSale() {
   const { products, recordSale } = useApp();
   const [open, setOpen] = useState(false);
-  const [pid, setPid] = useState<number | undefined>(products[0]?.id);
+  const [pid, setPid] = useState<string | number | undefined>(products[0]?.id);
   const [qty, setQty] = useState('1');
   const [customer, setCustomer] = useState('');
   const [method, setMethod] = useState('Cash');
 
-  const p = products.find((x) => x.id === pid);
+  const p = products.find((x) => String(x.id) === String(pid));
   const n = parseInt(qty, 10) || 0;
   const total = (p?.price || 0) * n;
 

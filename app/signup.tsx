@@ -6,6 +6,7 @@ import { Button, Field, Header, Screen, s } from '../components/ui';
 import { AppIcon } from '../components/AppIcon';
 import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
+import { errorMessage } from '../utils/errors';
 
 export default function Signup() {
   const { t, form, setForm, backendConfigured, signUp } = useApp();

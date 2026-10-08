@@ -1,5 +1,6 @@
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import type { Debtor, Product, Tx } from '../context/AppContext';
@@ -171,6 +172,44 @@ async function shareNativeFile(uri: string, mimeType: string, dialogTitle: strin
   await Sharing.shareAsync(uri, { mimeType, dialogTitle, UTI: mimeType === 'application/pdf' ? 'com.adobe.pdf' : 'public.comma-separated-values-text' });
 }
 
+async function saveToDownloads(uri: string): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  try {
+    const { granted } = await MediaLibrary.requestPermissionsAsync(true);
+    if (!granted) return false;
+    await MediaLibrary.saveToLibraryAsync(uri);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function deliverFile(contents: string, encoding: FileSystem.EncodingType, filename: string, mimeType: string, dialogTitle: string, label: string): Promise<void> {
+  const directories = [FileSystem.documentDirectory, FileSystem.cacheDirectory].filter(Boolean) as string[];
+  if (!directories.length) throw new Error('File storage is unavailable on this device.');
+
+  let lastError: unknown = null;
+  for (const directory of directories) {
+    const uri = `${directory}${filename}`;
+    try {
+      await FileSystem.writeAsStringAsync(uri, contents, { encoding });
+      const saved = await saveToDownloads(uri);
+      if (saved) {
+        Alert.alert(`${label} downloaded`, 'Saved to your device Downloads folder.', [
+          { text: 'Share', onPress: () => void shareNativeFile(uri, mimeType, dialogTitle).catch(() => {}) },
+          { text: 'OK' },
+        ]);
+        return;
+      }
+      await shareNativeFile(uri, mimeType, dialogTitle);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`The ${label.toLowerCase()} file could not be shared.`);
+}
+
 export async function exportReport(kind: ReportKind, format: ExportFormat, data: ReportData): Promise<void> {
   const suffix = new Date().toISOString().slice(0, 10);
   const title = TITLES[kind].replace(/\s+/g, '-').toLowerCase();
@@ -181,8 +220,9 @@ export async function exportReport(kind: ReportKind, format: ExportFormat, data:
       downloadOnWeb(pdfFromLines(pdfLinesForReport(kind, data)), `${title}-${suffix}.pdf`, 'application/pdf');
       return;
     }
-    const { uri } = await Print.printToFileAsync({ html });
-    await shareNativeFile(uri, 'application/pdf', TITLES[kind]);
+    const { base64 } = await Print.printToFileAsync({ html, base64: true });
+    if (!base64) throw new Error('The PDF file could not be created.');
+    await deliverFile(base64, FileSystem.EncodingType.Base64, `${title}-${suffix}.pdf`, 'application/pdf', TITLES[kind], 'PDF');
     return;
   }
 
@@ -193,12 +233,7 @@ export async function exportReport(kind: ReportKind, format: ExportFormat, data:
     downloadOnWeb(contents, filename, format === 'excel' ? 'application/vnd.ms-excel;charset=utf-8' : 'text/csv;charset=utf-8');
     return;
   }
-
-  const directory = FileSystem.cacheDirectory;
-  if (!directory) throw new Error('File storage is unavailable on this device.');
-  const uri = `${directory}${filename}`;
-  await FileSystem.writeAsStringAsync(uri, contents, { encoding: FileSystem.EncodingType.UTF8 });
-  await shareNativeFile(uri, format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv', TITLES[kind]);
+  await deliverFile(contents, FileSystem.EncodingType.UTF8, filename, format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv', TITLES[kind], format === 'excel' ? 'Excel file' : 'CSV file');
 }
 
 export async function exportAllReports(format: ExportFormat, data: Required<ReportData>): Promise<void> {
@@ -233,8 +268,9 @@ export async function exportAllReports(format: ExportFormat, data: Required<Repo
       downloadOnWeb(pdfFromLines(lines), `${filename}.pdf`, 'application/pdf');
       return;
     }
-    const { uri } = await Print.printToFileAsync({ html });
-    await shareNativeFile(uri, 'application/pdf', 'Tarisira All Reports');
+    const { base64 } = await Print.printToFileAsync({ html, base64: true });
+    if (!base64) throw new Error('The PDF file could not be created.');
+    await deliverFile(base64, FileSystem.EncodingType.Base64, `${filename}.pdf`, 'application/pdf', 'Tarisira All Reports', 'PDF');
     return;
   }
 
@@ -255,9 +291,5 @@ export async function exportAllReports(format: ExportFormat, data: Required<Repo
     downloadOnWeb(contents, outputName, format === 'excel' ? 'application/vnd.ms-excel;charset=utf-8' : 'text/csv;charset=utf-8');
     return;
   }
-  const directory = FileSystem.cacheDirectory;
-  if (!directory) throw new Error('File storage is unavailable on this device.');
-  const uri = `${directory}${outputName}`;
-  await FileSystem.writeAsStringAsync(uri, contents, { encoding: FileSystem.EncodingType.UTF8 });
-  await shareNativeFile(uri, format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv', 'Tarisira All Reports');
+  await deliverFile(contents, FileSystem.EncodingType.UTF8, outputName, format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv', 'Tarisira All Reports', format === 'excel' ? 'Excel file' : 'CSV file');
 }

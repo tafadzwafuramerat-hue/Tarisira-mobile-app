@@ -6,6 +6,7 @@ import { Button, Field, Screen, s } from '../components/ui';
 import { AppIcon } from '../components/AppIcon';
 import { C, SERIF } from '../constants/theme';
 import { useApp } from '../context/AppContext';
+import { errorMessage } from '../utils/errors';
 
 export default function Login() {
   const { t, backendConfigured, signIn } = useApp();

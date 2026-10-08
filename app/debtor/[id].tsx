@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../../components/LocalizedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -8,6 +8,8 @@ import { Field } from '../../components/ui';
 import { C, SERIF, money } from '../../constants/theme';
 import { AppIcon } from '../../components/AppIcon';
 import { useApp } from '../../context/AppContext';
+import { normalizePhone, whatsappUrl, smsUrl } from '../../utils/message';
+import { errorMessage } from '../../utils/errors';
 
 const due = (days: number) => (days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days} days`);
 
@@ -37,9 +39,24 @@ export default function DebtorDetail() {
       setAmount('');
       if (n >= d.amount) router.back();
     } catch (error) {
-      Alert.alert('Payment failed', error instanceof Error ? error.message : 'Could not record this payment.');
+      Alert.alert('Payment failed', errorMessage(error, 'Could not record this payment.'));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const sendVia = async (channel: 'WhatsApp' | 'SMS') => {
+    const digits = normalizePhone(d.phone);
+    if (!digits) return Alert.alert('No phone number', 'Add a phone number for this debtor first.');
+    const itemLine = d.item ? ` for ${d.item}` : '';
+    const message = `Hello ${d.name}, this is a friendly reminder. You have an outstanding balance of $${d.amount}${itemLine}, ${due(d.days).toLowerCase()}. Kindly settle at your earliest convenience. Thank you!`;
+    const url = channel === 'WhatsApp' ? whatsappUrl(d.phone, message) : smsUrl(d.phone, message);
+    try {
+      const ok = await Linking.canOpenURL(url);
+      if (!ok) return Alert.alert('Not available', channel === 'WhatsApp' ? 'WhatsApp is not installed on this device.' : 'SMS is not available on this device.');
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Could not open', `Could not open ${channel}.`);
     }
   };
 
@@ -56,6 +73,7 @@ export default function DebtorDetail() {
           <View style={s.avatar}><Text style={s.avatarText}>{d.name[0].toUpperCase()}</Text></View>
           <Text style={s.name}>{d.name}</Text>
           <Text style={s.muted}>{d.phone}</Text>
+          {d.item ? <Text style={s.item}>Owed: {d.item}</Text> : null}
           <Text style={s.label}>Outstanding Balance</Text>
           <Text style={s.amount}>{money(d.amount)}</Text>
           <Text style={s.due}>{due(d.days)}</Text>
@@ -68,6 +86,14 @@ export default function DebtorDetail() {
           <Pressable style={[s.action, { backgroundColor: C.dark }]} disabled={busy} onPress={() => void pay()}><Text style={[s.actionText, { color: '#fff' }]}>{busy ? 'Saving…' : 'Record Payment'}</Text></Pressable>
           <Pressable style={[s.action, s.actionOutline]} onPress={() => router.push({ pathname: '/create-reminder', params: { debtorId: d.id } })}>
             <Text style={s.actionText}>Send Reminder</Text>
+          </Pressable>
+        </View>
+        <View style={s.actions}>
+          <Pressable style={[s.action, s.actionOutline]} onPress={() => void sendVia('WhatsApp')}>
+            <Text style={s.actionText}>WhatsApp</Text>
+          </Pressable>
+          <Pressable style={[s.action, s.actionOutline]} onPress={() => void sendVia('SMS')}>
+            <Text style={s.actionText}>SMS</Text>
           </Pressable>
         </View>
 
@@ -98,6 +124,7 @@ const s = StyleSheet.create({
   avatarText: { color: '#fff', fontWeight: '800', fontSize: 20 },
   name: { fontSize: 19, fontWeight: '800', color: C.ink },
   muted: { color: C.muted, fontSize: 13, marginBottom: 14 },
+  item: { color: C.dark, fontWeight: '700', fontSize: 14, marginBottom: 14 },
   label: { color: C.muted, fontSize: 13, marginBottom: 4 },
   amount: { fontFamily: SERIF, fontSize: 38, fontWeight: '800', color: C.orange },
   due: { color: C.orange, fontWeight: '700', marginTop: 4 },

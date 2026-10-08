@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { Button, Field, Header, Screen, s } from '../components/ui';
 import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
+import { errorMessage } from '../utils/errors';
 
 const TYPES = ['Tuckshop', 'Clothing store', 'Salon', 'Restaurant', 'Hardware', 'Other'];
 

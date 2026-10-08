@@ -6,6 +6,7 @@ import { AppIcon } from '../components/AppIcon';
 import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
 import { exportAllReports, ExportFormat } from '../utils/reportExport';
+import { errorMessage } from '../utils/errors';
 
 const FORMATS: { id: ExportFormat; icon: React.ComponentProps<typeof AppIcon>['name']; title: string; sub: string }[] = [
   { id: 'pdf', icon: 'file-pdf-box', title: 'PDF', sub: 'Formatted report, ready to share' },

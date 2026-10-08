@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { AppIcon } from '../components/AppIcon';
 import { C, SERIF } from '../constants/theme';
 import { useApp } from '../context/AppContext';
+import { errorMessage } from '../utils/errors';
 
 type Row = { icon: React.ComponentProps<typeof AppIcon>['name']; label: string; right?: string; onPress?: () => void };
 const soon = () => Alert.alert('Coming soon', 'This page is not built yet.');

@@ -10,7 +10,7 @@ export type Product = {
 };
 
 export type PaymentEvent = { id: string | number; label: string; sub: string; amount: number; date: string };
-export type Debtor = { id: string | number; name: string; phone: string; amount: number; days: number; history: PaymentEvent[] };
+export type Debtor = { id: string | number; name: string; phone: string; amount: number; days: number; item?: string; history: PaymentEvent[] };
 
 export type Tx = { id: string | number; name: string; cat: string; qty: number; total: number; time: string; date: string; customer?: string; method: string };
 
@@ -67,7 +67,7 @@ type Ctx = {
   products: Product[]; addProduct: (p: { name: string; cat: string; price: number; qty: number }) => Promise<void>;
   adjustStock: (id: string | number, delta: number, label: string) => Promise<void>;
 
-  debtors: Debtor[]; addDebtor: (d: { name: string; amount: number; days: number; phone?: string }) => Promise<void>;
+  debtors: Debtor[]; addDebtor: (d: { name: string; amount: number; days: number; phone?: string; item?: string }) => Promise<void>;
   markPaid: (id: string | number) => void; recordPayment: (id: string | number, amount: number) => Promise<void>;
 
   reminders: Reminder[]; addReminder: (r: Omit<Reminder, 'id' | 'createdLabel'>) => Promise<void>;
@@ -405,14 +405,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (client && businessId) {
           const { data, error } = await client.from('debtors').insert({
             business_id: businessId, name: debtor.name, phone: debtor.phone || null,
+            item_owed: debtor.item || null,
             opening_balance: debtor.amount, current_balance: debtor.amount, due_in_days: debtor.days,
           }).select('*').single();
           if (error) throw error;
-          setDebtors((list) => [...list, { id: data.id, name: data.name, phone: data.phone ?? '', amount: Number(data.current_balance), days: data.due_in_days, history: [{ id: data.id, label: 'Debt recorded', sub: 'Initial amount', amount: Number(data.opening_balance), date: today() }] }]);
+          setDebtors((list) => [...list, { id: data.id, name: data.name, phone: data.phone ?? '', item: data.item_owed ?? undefined, amount: Number(data.current_balance), days: data.due_in_days, history: [{ id: data.id, label: 'Debt recorded', sub: 'Initial amount', amount: Number(data.opening_balance), date: today() }] }]);
           return;
         }
         setDebtors((list) => [...list, {
-          id: Date.now(), name: debtor.name, phone: debtor.phone || '+263 77 000 0000', amount: debtor.amount, days: debtor.days,
+          id: Date.now(), name: debtor.name, phone: debtor.phone || '+263 77 000 0000', item: debtor.item, amount: debtor.amount, days: debtor.days,
           history: [{ id: Date.now(), label: 'Debt recorded', sub: 'Initial amount', amount: debtor.amount, date: today() }],
         }]);
       },

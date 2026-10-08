@@ -159,6 +159,7 @@ create table if not exists public.debtors (
 );
 alter table public.debtors add column if not exists current_balance numeric(12,2) not null default 0 check (current_balance >= 0);
 alter table public.debtors add column if not exists due_in_days integer not null default 7 check (due_in_days >= 0);
+alter table public.debtors add column if not exists item_owed text;
 
 create table if not exists public.stock_movements (
   id uuid primary key default gen_random_uuid(),

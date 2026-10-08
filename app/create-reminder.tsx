@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Button, Header, Screen, s } from '../components/ui';
 import { AppIcon } from '../components/AppIcon';
 import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
+import { normalizePhone, whatsappUrl, smsUrl } from '../utils/message';
 
 type SendOn = 'Today' | 'Tomorrow' | 'Custom';
+type Channel = 'WhatsApp' | 'SMS';
 
 export default function CreateReminder() {
   const { debtorId } = useLocalSearchParams<{ debtorId?: string }>();
@@ -15,12 +17,36 @@ export default function CreateReminder() {
   const [open, setOpen] = useState(false);
   const [did, setDid] = useState<string | number | undefined>(debtorId ?? debtors[0]?.id);
   const [sendOn, setSendOn] = useState<SendOn>('Tomorrow');
+  const [channel, setChannel] = useState<Channel>('WhatsApp');
+  const [sending, setSending] = useState(false);
 
   const d = debtors.find((x) => String(x.id) === String(did));
   const bizName = form.bizName || 'your business';
+  const dueText = d ? (d.days === 0 ? 'today' : d.days === 1 ? 'tomorrow' : `in ${d.days} days`) : '';
+  const itemLine = d?.item ? ` for ${d.item}` : '';
   const message = d
-    ? `Hello ${d.name}, this is a friendly reminder that you have an outstanding balance of $${d.amount} with ${bizName}. Kindly settle at your earliest convenience. Thank you!`
+    ? `Hello ${d.name}, this is a friendly reminder from ${bizName}. You have an outstanding balance of $${d.amount}${itemLine}, due ${dueText}. Kindly settle at your earliest convenience. Thank you!`
     : '';
+
+  const digits = normalizePhone(d?.phone ?? '');
+  const canSend = Boolean(d && digits.length > 0);
+
+  const sendNow = async () => {
+    if (!d || !digits) return Alert.alert('No phone number', 'Add a phone number for this debtor first.');
+    const url = channel === 'WhatsApp' ? whatsappUrl(d.phone, message) : smsUrl(d.phone, message);
+    setSending(true);
+    try {
+      const ok = await Linking.canOpenURL(url);
+      if (!ok) {
+        return Alert.alert('Not available', channel === 'WhatsApp' ? 'WhatsApp is not installed on this device.' : 'SMS is not available on this device.');
+      }
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Could not open', `Could not open ${channel}.`);
+    } finally {
+      setSending(false);
+    }
+  };
 
   const save = () => {
     if (!d) return;
@@ -51,6 +77,15 @@ export default function CreateReminder() {
       <View style={c.preview}><Text style={c.previewText}>{message}</Text></View>
       <View style={{ height: 20 }} />
 
+      <Text style={s.label}>Send Via</Text>
+      <View style={c.sendRow}>
+        {(['WhatsApp', 'SMS'] as Channel[]).map((opt) => (
+          <Pressable key={opt} style={[c.sendChip, channel === opt && c.sendChipOn]} onPress={() => setChannel(opt)}>
+            <Text style={[c.sendText, channel === opt && { color: C.dark }]}>{opt}</Text>
+          </Pressable>
+        ))}
+      </View>
+
       <Text style={s.label}>Send On</Text>
       <View style={c.sendRow}>
         {(['Today', 'Tomorrow', 'Custom'] as SendOn[]).map((opt) => (
@@ -62,10 +97,12 @@ export default function CreateReminder() {
 
       <View style={c.notice}>
         <AppIcon name="message-text-outline" size={18} color={C.dark} />
-        <Text style={c.noticeText}>Will be sent via WhatsApp to <Text style={{ fontWeight: '800' }}>{d?.phone}</Text></Text>
+        <Text style={c.noticeText}>Sends to <Text style={{ fontWeight: '800' }}>{d?.phone || '—'}</Text> via {channel}</Text>
       </View>
 
-      <Button label="Schedule Reminder" onPress={save} disabled={!d} />
+      <Button label={sending ? 'Opening…' : `Send via ${channel}`} disabled={!canSend || sending} onPress={() => void sendNow()} />
+      <View style={{ height: 12 }} />
+      <Button label="Schedule Reminder" outline onPress={save} disabled={!d} />
     </Screen>
   );
 }

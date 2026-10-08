@@ -4,6 +4,7 @@ import { LocalizedText as Text } from './LocalizedText';
 import { C, SERIF } from '../constants/theme';
 import { useApp } from '../context/AppContext';
 import { Button, Field, s } from './ui';
+import { errorMessage } from '../utils/errors';
 
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
@@ -30,7 +31,7 @@ export function ProductForm({ onClose }: { onClose: () => void }) {
       await addProduct({ name: v.name.trim(), cat: v.cat.trim() || 'Other', price, qty });
       onClose();
     } catch (error) {
-      Alert.alert('Product could not be saved', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert('Product could not be saved', errorMessage(error, 'Please try again.'));
     } finally {
       setBusy(false);
     }
@@ -48,7 +49,7 @@ export function ProductForm({ onClose }: { onClose: () => void }) {
 
 export function DebtorForm({ onClose }: { onClose: () => void }) {
   const { addDebtor } = useApp();
-  const [v, setV] = useState({ name: '', amount: '', days: '7' });
+  const [v, setV] = useState({ name: '', phone: '', item: '', amount: '', days: '7' });
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof v) => (x: string) => setV({ ...v, [k]: x });
   const save = async () => {
@@ -56,10 +57,10 @@ export function DebtorForm({ onClose }: { onClose: () => void }) {
     if (!v.name.trim() || !(amount > 0)) return Alert.alert('Missing details', 'Enter a name and the amount owed.');
     setBusy(true);
     try {
-      await addDebtor({ name: v.name.trim(), amount, days: days >= 0 ? days : 7 });
+      await addDebtor({ name: v.name.trim(), phone: v.phone.trim(), item: v.item.trim(), amount, days: days >= 0 ? days : 7 });
       onClose();
     } catch (error) {
-      Alert.alert('Debtor could not be saved', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert('Debtor could not be saved', errorMessage(error, 'Please try again.'));
     } finally {
       setBusy(false);
     }
@@ -67,6 +68,8 @@ export function DebtorForm({ onClose }: { onClose: () => void }) {
   return (
     <Sheet title="Add Debtor" onClose={onClose}>
       <Field label="Customer name" value={v.name} onChangeText={set('name')} />
+      <Field label="Phone number" keyboardType="phone-pad" value={v.phone} onChangeText={set('phone')} placeholder="e.g. +263 77 123 4567" />
+      <Field label="Product owed" value={v.item} onChangeText={set('item')} placeholder="e.g. Fleece 1" />
       <Field label="Amount owed ($)" keyboardType="decimal-pad" value={v.amount} onChangeText={set('amount')} />
       <Field label="Due in (days)" keyboardType="number-pad" value={v.days} onChangeText={set('days')} />
       <Button label={busy ? 'Saving…' : 'Save Debtor'} disabled={busy} onPress={() => void save()} />

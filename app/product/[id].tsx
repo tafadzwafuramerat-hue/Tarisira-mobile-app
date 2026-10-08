@@ -8,6 +8,7 @@ import { Badge, s } from '../../components/ui';
 import { AppIcon } from '../../components/AppIcon';
 import { C, SERIF, money } from '../../constants/theme';
 import { useApp } from '../../context/AppContext';
+import { errorMessage } from '../../utils/errors';
 
 export default function ProductDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();

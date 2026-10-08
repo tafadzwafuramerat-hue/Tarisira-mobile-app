@@ -3,6 +3,7 @@ import { Alert, View } from 'react-native';
 import { Button } from './ui';
 import { exportReport, ExportFormat, ReportKind } from '../utils/reportExport';
 import { useApp } from '../context/AppContext';
+import { errorMessage } from '../utils/errors';
 
 export function ReportExportButtons({ kind }: { kind: ReportKind }) {
   const { txs, products, debtors } = useApp();

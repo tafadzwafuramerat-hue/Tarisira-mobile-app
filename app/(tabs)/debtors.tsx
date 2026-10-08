@@ -32,7 +32,7 @@ export default function Debtors() {
           <Card style={r.row}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 }}>
               <View style={[r.avatar, { backgroundColor: SHADES[i % 3] }]}><Text style={r.avatarText}>{d.name[0].toUpperCase()}</Text></View>
-              <View><Text style={r.name}>{d.name}</Text><Text style={s.muted}>{due(d)}</Text></View>
+              <View><Text style={r.name}>{d.name}</Text><Text style={s.muted}>{d.item ? `${d.item} · ` : ''}{due(d)}</Text></View>
             </View>
             <View style={{ alignItems: 'flex-end', gap: 6 }}>
               <Text style={r.amount}>{money(d.amount)}</Text>

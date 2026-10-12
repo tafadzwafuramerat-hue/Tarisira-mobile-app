@@ -20,7 +20,7 @@ export default function Business() {
       try {
         await createBusiness();
       } catch (error) {
-        Alert.alert(t.bizTitle, error instanceof Error ? error.message : 'Could not create the business.');
+        Alert.alert(t.bizTitle, errorMessage(error, 'Could not create the business.'));
         setBusy(false);
         return;
       }

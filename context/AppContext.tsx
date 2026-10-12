@@ -58,6 +58,7 @@ const START_DEBTORS: Debtor[] = [
 type Ctx = {
   lang: Lang; setLang: (l: Lang) => void; t: Strings;
   form: Form; setForm: (patch: Partial<Form>) => void;
+  photo: string | null; setPhoto: (uri: string | null) => void;
   session: Session | null; authLoading: boolean; backendConfigured: boolean;
   businessId: string | null; createBusiness: () => Promise<string | null>;
   signIn: (identifier: string, password: string) => Promise<boolean>;
@@ -94,6 +95,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [debtors, setDebtors] = useState<Debtor[]>(supabaseConfigured ? [] : START_DEBTORS);
   const [txs, setTxs] = useState<Tx[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [photo, setPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     const client = supabase;
@@ -140,8 +142,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ]);
       if (!alive) return;
       if (error) console.warn('Could not load language preference:', error.message);
-      const savedPreference = preference?.data as { lang?: Lang } | undefined;
+      const savedPreference = preference?.data as { lang?: Lang; photo?: string | null } | undefined;
       if (savedPreference?.lang) setLang(savedPreference.lang);
+      setPhoto(savedPreference?.photo ?? null);
       if (membershipError) console.warn('Could not load business membership:', membershipError.message);
       setProducts([]);
       setDebtors([]);
@@ -297,24 +300,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setDebtors(supabaseConfigured ? [] : START_DEBTORS);
     setTxs([]);
     setReminders([]);
+    setPhoto(null);
     setLoadedUserId(null);
   }, []);
 
-  const appState = useMemo(() => ({ lang }), [lang]);
+  const appState = useMemo(() => ({ lang, photo }), [lang, photo]);
   useEffect(() => {
     const client = supabase;
     if (!client || !session?.user.id || loadedUserId !== session.user.id) return;
     const timeout = setTimeout(() => {
       void client.from('app_state').upsert({
         user_id: session.user.id,
-        data: { lang: appState.lang },
+        data: { lang: appState.lang, photo: appState.photo },
         updated_at: new Date().toISOString(),
       }).then(({ error }) => {
-        if (error) console.warn('Could not save language preference:', error.message);
+        if (error) console.warn('Could not save preferences:', error.message);
       });
     }, 500);
     return () => clearTimeout(timeout);
-  }, [appState.lang, loadedUserId, session?.user.id]);
+  }, [appState.lang, appState.photo, loadedUserId, session?.user.id]);
 
   useEffect(() => {
     const client = supabase;
@@ -351,6 +355,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lang, setLang, t: STR[lang],
       session, authLoading, backendConfigured: supabaseConfigured, businessId, createBusiness, signIn, signUp, signOut,
       form, setForm: (patch) => setFormState((current) => ({ ...current, ...patch })),
+      photo, setPhoto,
 
       products,
       addProduct: async (product) => {
@@ -498,7 +503,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       stockValue: products.reduce((sum, product) => sum + product.qty * product.price, 0),
       cats: Object.entries(cats).map(([key, amount]) => [key, Math.round(amount * 100) / 100] as [string, number]),
     };
-  }, [lang, form, products, debtors, txs, reminders, session, authLoading, businessId, createBusiness, signIn, signUp, signOut]);
+  }, [lang, form, products, debtors, txs, reminders, session, authLoading, businessId, createBusiness, signIn, signUp, signOut, photo]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

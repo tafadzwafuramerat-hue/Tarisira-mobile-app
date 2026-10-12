@@ -498,4 +498,33 @@ create policy "Users can delete their own app state" on public.app_state
 revoke all on public.app_state from anon;
 grant select, insert, update, delete on public.app_state to authenticated;
 
+-- Profile pictures live in a public avatars bucket. Every user owns a folder
+-- named after their user id, so the policies below keep each account limited
+-- to its own avatar while the public bucket flag lets anyone view pictures.
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+-- RLS is already enabled on storage.objects by default in Supabase, so we
+-- only need the policies below -- no ALTER TABLE required.
+drop policy if exists "avatars: public read" on storage.objects;
+create policy "avatars: public read" on storage.objects
+  for select using (bucket_id = 'avatars');
+
+drop policy if exists "avatars: owner insert" on storage.objects;
+create policy "avatars: owner insert" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'avatars' and name like auth.uid()::text || '/%');
+
+drop policy if exists "avatars: owner update" on storage.objects;
+create policy "avatars: owner update" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'avatars' and name like auth.uid()::text || '/%')
+  with check (bucket_id = 'avatars' and name like auth.uid()::text || '/%');
+
+drop policy if exists "avatars: owner delete" on storage.objects;
+create policy "avatars: owner delete" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'avatars' and name like auth.uid()::text || '/%');
+
 commit;

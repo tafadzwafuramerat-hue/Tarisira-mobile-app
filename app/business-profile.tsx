@@ -1,25 +1,32 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { router } from 'expo-router';
 import { Button, Field, Header, Screen, s } from '../components/ui';
 import { AppIcon } from '../components/AppIcon';
 import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
+import { pickAvatar } from '../utils/pickAvatar';
 
 const TYPES = ['Tuckshop', 'Clothing store', 'Salon', 'Restaurant', 'Hardware', 'Other'];
 
 export default function BusinessProfile() {
-  const { form, setForm } = useApp();
+  const { form, setForm, photo, setPhoto, session } = useApp();
   const [open, setOpen] = useState(false);
 
   return (
     <Screen>
       <Header title="Business Profile" sub="" />
-      <View style={p.avatarWrap}>
-        <View style={p.avatar}><AppIcon name="leaf" size={36} color="#fff" /></View>
-        <View style={p.editBadge}><AppIcon name="pencil" size={13} color={C.dark} /></View>
-      </View>
+      <Pressable style={p.avatarWrap} onPress={() => pickAvatar(session, setPhoto)}>
+        <View>
+          {photo ? (
+            <Image source={{ uri: photo }} style={p.avatar} />
+          ) : (
+            <View style={p.avatar}><AppIcon name="leaf" size={36} color="#fff" /></View>
+          )}
+          <View style={p.editBadge}><AppIcon name="pencil" size={13} color="#fff" /></View>
+        </View>
+      </Pressable>
 
       <Field label="Business Name" value={form.bizName} onChangeText={(v) => setForm({ bizName: v })} />
 
@@ -54,7 +61,7 @@ export default function BusinessProfile() {
 
 const p = StyleSheet.create({
   avatarWrap: { alignSelf: 'center', marginBottom: 24 },
-  avatar: { width: 84, height: 84, borderRadius: 22, backgroundColor: C.dark, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 84, height: 84, borderRadius: 22, backgroundColor: C.dark, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   editBadge: { position: 'absolute', right: -4, bottom: -4, width: 26, height: 26, borderRadius: 13, backgroundColor: C.orange, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: C.bg },
   select: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dropdown: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: C.line, borderRadius: 16, marginTop: 6 },

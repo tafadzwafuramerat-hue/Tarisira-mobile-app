@@ -14,7 +14,7 @@ export function ReportExportButtons({ kind }: { kind: ReportKind }) {
     try {
       await exportReport(kind, format, { sales: txs, products, debtors });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'The report could not be exported.';
+      const message = errorMessage(error, 'The report could not be exported.');
       Alert.alert('Export failed', message);
     } finally {
       setBusy(null);

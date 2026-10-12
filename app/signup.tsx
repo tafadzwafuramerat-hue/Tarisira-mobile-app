@@ -23,7 +23,7 @@ export default function Signup() {
       await signUp({ email: form.email, phone: form.phone, password: form.password, name: form.name });
       router.push('/business');
     } catch (error) {
-      Alert.alert(t.createTitle, error instanceof Error ? error.message : 'Unable to create account.');
+      Alert.alert(t.createTitle, errorMessage(error, 'Unable to create account.'));
     } finally {
       setBusy(false);
     }

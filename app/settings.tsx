@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -7,13 +7,14 @@ import { router } from 'expo-router';
 import { AppIcon } from '../components/AppIcon';
 import { C, SERIF } from '../constants/theme';
 import { useApp } from '../context/AppContext';
+import { pickAvatar } from '../utils/pickAvatar';
 import { errorMessage } from '../utils/errors';
 
 type Row = { icon: React.ComponentProps<typeof AppIcon>['name']; label: string; right?: string; onPress?: () => void };
 const soon = () => Alert.alert('Coming soon', 'This page is not built yet.');
 
 export default function Settings() {
-  const { form, lang, signOut, backendConfigured } = useApp();
+  const { form, lang, signOut, backendConfigured, photo, setPhoto, session } = useApp();
   const insets = useSafeAreaInsets();
 
   const groups: Row[][] = [
@@ -39,10 +40,12 @@ export default function Settings() {
           if (backendConfigured) await signOut();
           router.replace('/login');
         } catch (error) {
-          Alert.alert('Log out failed', error instanceof Error ? error.message : 'Please try again.');
+          Alert.alert('Log out failed', errorMessage(error, 'Please try again.'));
         }
       } },
     ]);
+
+  const pickPhoto = () => pickAvatar(session, setPhoto);
 
   return (
     <View style={{ flex: 1, backgroundColor: C.page }}>
@@ -53,7 +56,16 @@ export default function Settings() {
       </View>
       <ScrollView>
         <View style={z.profile}>
-          <View style={z.bigLogo}><AppIcon name="leaf" size={36} color="#fff" /></View>
+          <Pressable onPress={pickPhoto}>
+            <View>
+              {photo ? (
+                <Image source={{ uri: photo }} style={z.bigLogo} />
+              ) : (
+                <View style={z.bigLogo}><AppIcon name="leaf" size={36} color="#fff" /></View>
+              )}
+              <View style={z.cameraBadge}><AppIcon name="camera" size={13} color="#fff" /></View>
+            </View>
+          </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={z.name}>{form.bizName || 'Your Business'}</Text>
             <Text style={z.muted}>{form.bizPhone || form.phone || '+263'} · {form.location.split(',')[0]}</Text>
@@ -87,7 +99,8 @@ const z = StyleSheet.create({
   back: { color: '#fff', fontSize: 30, marginRight: 12, lineHeight: 30 },
   barTitle: { fontFamily: SERIF, fontSize: 20, fontWeight: '800', color: '#fff' },
   profile: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: '#fff', padding: 20 },
-  bigLogo: { width: 68, height: 68, borderRadius: 18, backgroundColor: C.dark, alignItems: 'center', justifyContent: 'center' },
+  bigLogo: { width: 68, height: 68, borderRadius: 18, backgroundColor: C.dark, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  cameraBadge: { position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: 12, backgroundColor: C.dark, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
   name: { fontSize: 19, fontWeight: '800', color: C.ink, marginBottom: 2 },
   muted: { color: C.muted, fontSize: 13 },
   badge: { alignSelf: 'flex-start', backgroundColor: C.mint, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5, marginTop: 8 },

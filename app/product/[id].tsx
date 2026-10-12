@@ -26,7 +26,7 @@ export default function ProductDetail() {
     try {
       await adjustStock(p.id, delta, label);
     } catch (error) {
-      Alert.alert('Stock update failed', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert('Stock update failed', errorMessage(error, 'Please try again.'));
     } finally {
       setBusy(false);
     }

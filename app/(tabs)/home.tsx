@@ -37,7 +37,7 @@ export default function Home() {
       <Text style={[s.h1, { fontSize: 26 }]}>{greet}, {name}</Text>
       <Text style={[s.muted, { marginTop: 4, marginBottom: 16, fontSize: 15 }]}>Here's your business overview</Text>
       <View style={h.grid}>
-        <Stat icon="alert-outline" label="Low Stock" value={String(lowCount)} note="Needs attention" color={DEEP_RED} attention />
+        <Stat icon="alert-outline" label="Low Stock" value={String(lowCount)} note={lowCount > 0 ? 'Needs attention' : 'All stocked'} color={lowCount > 0 ? DEEP_RED : undefined} attention={lowCount > 0} />
         <Stat icon="cash-multiple" label="Today's Sales" value={money(today)} color={C.orange} iconColor={C.muted} note={`${txs.length} transactions`} />
         <Stat icon="account-group-outline" label="Debts Owed" value={money(debtTotal)} note={`${debtors.length} debtors`} />
         <Stat icon="package-variant-closed" label="Products" value={String(products.length)} />

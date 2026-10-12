@@ -36,7 +36,7 @@ export default function ExportData() {
       });
       await exportAllReports(format as ExportFormat, { sales: filteredSales, products, debtors });
     } catch (error) {
-      Alert.alert('Export failed', error instanceof Error ? error.message : 'The reports could not be exported.');
+      Alert.alert('Export failed', errorMessage(error, 'The reports could not be exported.'));
     } finally {
       setBusy(false);
     }

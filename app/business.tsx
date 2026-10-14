@@ -47,7 +47,7 @@ export default function Business() {
       )}
       <View style={{ height: 16 }} />
       <Field label={t.location} placeholder="e.g. Mufakose, Harare" value={form.location} onChangeText={(v) => setForm({ location: v })} />
-      <Field label={t.phone} placeholder="+263 77 123 4567" keyboardType="phone-pad" value={form.bizPhone} onChangeText={(v) => setForm({ bizPhone: v })} />
+      <Field label={t.bizPhone} placeholder="+263 77 123 4567" keyboardType="phone-pad" value={form.bizPhone} onChangeText={(v) => setForm({ bizPhone: v })} />
       <Button label={busy ? 'Saving…' : t.cont} disabled={!form.bizName || !form.location || busy} onPress={() => void continueSetup()} />
     </Screen>
   );

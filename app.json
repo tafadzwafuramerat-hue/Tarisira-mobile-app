@@ -9,14 +9,22 @@
     "plugins": [
       "expo-router",
       "expo-sharing",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-font"
     ],
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "y"
     },
     "android": {
       "package": "com.tarisira.app"
     },
-    "web": {}
+    "web": {},
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "aaf2d796-1fa7-49e4-b8ef-77af24d9c2fc"
+      }
+    }
   }
 }

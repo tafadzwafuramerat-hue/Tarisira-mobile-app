@@ -13,8 +13,8 @@ const TOP = [
 
 export default function SalesReport() {
   const { today, txs } = useApp();
-  const revenue = 2325 + today;
-  const count = 148 + txs.length;
+const revenue = today;
+const count = txs.length;
   return (
     <Screen>
       <Header title="Sales Report" sub="" />

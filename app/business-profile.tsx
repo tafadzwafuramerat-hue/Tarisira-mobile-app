@@ -46,7 +46,7 @@ export default function BusinessProfile() {
       <View style={{ height: 16 }} />
 
       <Field label="Location" value={form.location} onChangeText={(v) => setForm({ location: v })} />
-      <Field label="Phone Number" keyboardType="phone-pad" value={form.bizPhone} onChangeText={(v) => setForm({ bizPhone: v })} />
+      <Field label=" Business Phone Number" keyboardType="phone-pad" value={form.bizPhone} onChangeText={(v) => setForm({ bizPhone: v })} />
 
       <Text style={s.label}>Currency</Text>
       <View style={[s.input, p.readonly]}>

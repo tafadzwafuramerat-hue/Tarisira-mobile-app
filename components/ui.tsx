@@ -41,6 +41,21 @@ export function Field({ label, ...props }: { label: string } & TextInputProps) {
   );
 }
 
+export function PasswordField({ label, value, onChangeText, placeholder }: { label: string; value: string; onChangeText: (v: string) => void; placeholder?: string }) {
+  const [show, setShow] = React.useState(false);
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Text style={s.label}>{label}</Text>
+      <View style={{ position: 'relative' }}>
+        <TextInput style={[s.input, { paddingRight: 44 }]} placeholder={placeholder} placeholderTextColor="#8FA79B" secureTextEntry={!show} value={value} onChangeText={onChangeText} />
+        <Pressable onPress={() => setShow(!show)} style={s.eyeWrap} hitSlop={8}>
+          <AppIcon name={show ? 'eye-off' : 'eye'} size={22} color={C.muted} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export function Header({ title, sub, step }: { title: string; sub: string; step?: number }) {
   const { t } = useApp();
   return (
@@ -115,4 +130,5 @@ export const s = StyleSheet.create({
   badgeText: { color: C.dark, fontWeight: '800', fontSize: 12 },
   search: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderWidth: 1.5, borderColor: C.line, borderRadius: 16, paddingHorizontal: 14 },
   searchInput: { flex: 1, paddingVertical: 14, fontSize: 15, color: C.ink },
+  eyeWrap: { position: 'absolute', right: 12, top: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
 });

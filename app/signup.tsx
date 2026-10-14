@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert, Pressable, StyleSheet } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { router } from 'expo-router';
-import { Button, Field, Header, Screen, s } from '../components/ui';
+import { Button, Field, Header, PasswordField, Screen, s } from '../components/ui';
 import { AppIcon } from '../components/AppIcon';
 import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
@@ -34,7 +34,7 @@ export default function Signup() {
       <Field label={t.fullName} placeholder={t.fullName} value={form.name} onChangeText={(v) => setForm({ name: v })} />
       <Field label="Email (optional)" placeholder="name@example.com" keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={(v) => setForm({ email: v })} />
       <Field label={t.phone} placeholder="+263 XX XXX XXXX" keyboardType="phone-pad" value={form.phone} onChangeText={(v) => setForm({ phone: v })} />
-      <Field label={t.password} placeholder={t.password} secureTextEntry value={form.password} onChangeText={(v) => setForm({ password: v })} />
+      <PasswordField label={t.password} placeholder={t.password} value={form.password} onChangeText={(v) => setForm({ password: v })} />
       <Pressable style={g.row} onPress={() => setForm({ agree: !form.agree })}>
         <Pressable style={[s.check, form.agree && { backgroundColor: C.green, borderColor: C.green }]} onPress={() => setForm({ agree: !form.agree })}>
           {form.agree && <AppIcon name="check" size={14} color="#fff" />}

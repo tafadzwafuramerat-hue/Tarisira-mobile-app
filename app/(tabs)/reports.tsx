@@ -28,7 +28,7 @@ export default function Reports() {
   return (
     <ScrollView contentContainerStyle={{ padding: 16 }}>
       <View style={p.grid}>
-        <Stat icon="cash-multiple" label="Monthly Sales" value={money(2325 + today)} color={C.orange} />
+        <Stat icon="cash-multiple" label="Monthly Sales" value={money(today)} color={C.orange} />
         <Stat icon="package-variant-closed" label="Stock Value" value={money(Math.round(stockValue))} />
         <Stat icon="account-group-outline" label="Total Debt" value={money(debtTotal)} />
         <Stat icon="archive-outline" label="Products" value={String(products.length)} />

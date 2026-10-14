@@ -9,7 +9,7 @@ import { useApp } from '../../context/AppContext';
 
 export default function Sales() {
   const { today, txs } = useApp();
-  const cards: [string, number, string?][] = [['Today', today, C.orange], ['Week', 595 + today], ['Month', 2325 + today]];
+  const cards: [string, number, string?][] = [['Today', today, C.orange], ['Week', 0], ['Month', 0]];
   return (
     <ScrollView contentContainerStyle={{ padding: 16 }}>
       <View style={{ flexDirection: 'row', gap: 10 }}>

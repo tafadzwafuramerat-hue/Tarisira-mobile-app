@@ -83,8 +83,8 @@ export default function WhatsApp() {
     }
     if (/\b(report|reports)\b|mushum|mishum/.test(t) || t === '4') {
       return inShona
-        ? `Mwedzi uno: ${money(2325 + today)} yatengeswa; ${money(debtTotal)} haisati yabhadharwa.`
-        : `This month: ${money(2325 + today)} in sales, ${money(debtTotal)} outstanding.`;
+        ? `Mwedzi uno: ${money(today)} yatengeswa; ${money(debtTotal)} haisati yabhadharwa.`
+        : `This month: ${money(today)} in sales, ${money(debtTotal)} outstanding.`;
     }
     if (/\b(reminder|reminders)\b|yeuchidz|chiyeuchid/.test(t) || t === '5') {
       return inShona

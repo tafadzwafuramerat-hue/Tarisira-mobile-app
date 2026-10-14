@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { router } from 'expo-router';
-import { Button, Field, Screen, s } from '../components/ui';
+import { Button, Field, PasswordField, Screen, s } from '../components/ui';
 import { AppIcon } from '../components/AppIcon';
 import { C, SERIF } from '../constants/theme';
 import { useApp } from '../context/AppContext';
@@ -37,7 +37,7 @@ export default function Login() {
       <Text style={[s.h1, { marginTop: 24 }]}>{t.welcome}</Text>
       <Text style={s.sub}>{t.signin}</Text>
       <Field label={t.phoneEmail} placeholder={t.phoneEmail} autoCapitalize="none" value={identifier} onChangeText={setIdentifier} keyboardType="email-address" />
-      <Field label={t.password} placeholder={t.password} secureTextEntry value={password} onChangeText={setPassword} />
+      <PasswordField label={t.password} placeholder={t.password} value={password} onChangeText={setPassword} />
       <Text style={l.forgot}>{t.forgot}</Text>
       <Button label={busy ? 'Signing in…' : t.login} disabled={busy} onPress={() => void doLogin()} />
       <View style={l.orRow}><View style={l.orLine} /><Text style={l.orText}>{t.or}</Text><View style={l.orLine} /></View>

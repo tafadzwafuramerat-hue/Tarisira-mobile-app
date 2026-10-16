@@ -25,7 +25,7 @@ export default function Settings() {
       { icon: 'star-outline', label: 'Subscription', onPress: () => router.push('/subscription') },
     ],
     [
-      { icon: 'lock-outline', label: 'Privacy & Security' },
+      { icon: 'lock-outline', label: 'Privacy & Security', onPress: () => router.push('/privacy-security') },
       { icon: 'export-variant', label: 'Export Data', onPress: () => router.push('/export-data') },
       { icon: 'message-text-outline', label: 'WhatsApp Bot', onPress: () => router.push('/whatsapp') },
       { icon: 'help-circle-outline', label: 'Help & Support', onPress: () => router.push('/help') },

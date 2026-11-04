@@ -53,7 +53,7 @@ export default function PrivacySecurity() {
         <Pressable onPress={() => router.back()} hitSlop={12}><Text style={p.back}>‹</Text></Pressable>
         <Text style={p.barTitle}>Privacy & Security</Text>
         <Pressable onPress={() => router.push('/settings')} hitSlop={12} style={p.iconBtn}>
-          <AppIcon name="settings-outline" size={22} color="#fff" />
+          <AppIcon name="cog-outline" size={22} color="#fff" />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>

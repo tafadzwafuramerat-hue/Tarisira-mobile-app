@@ -498,6 +498,77 @@ create policy "Users can delete their own app state" on public.app_state
 revoke all on public.app_state from anon;
 grant select, insert, update, delete on public.app_state to authenticated;
 
+-- Subscription payments (EcoCash / OneMoney / Mukuru / Card via Paynow).
+create table if not exists public.subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  plan text not null default 'Standard',
+  amount numeric(12,2) not null default 3.00 check (amount >= 0),
+  status text not null default 'pending' check (status in ('pending', 'paid', 'failed', 'cancelled')),
+  provider text,
+  phone text,
+  paynow_reference text,
+  paynow_poll_url text,
+  note text,
+  paid_at timestamptz,
+  created_by uuid not null default auth.uid() references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (business_id, id)
+);
+
+create or replace function public.record_subscription_payment(
+  target_business_id uuid,
+  payment_amount numeric,
+  payment_provider text default null,
+  payment_phone text default null,
+  payment_note text default null,
+  payment_paynow_reference text default null,
+  payment_paynow_poll_url text default null
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  new_payment_id uuid;
+begin
+  if current_user_id is null or not public.is_business_member(target_business_id) then
+    raise exception 'You do not have access to this business';
+  end if;
+  if payment_amount <= 0 then raise exception 'Payment amount must be greater than zero'; end if;
+
+  insert into public.subscriptions (business_id, amount, provider, phone, note, paynow_reference, paynow_poll_url, status, created_by)
+  values (target_business_id, payment_amount, nullif(trim(payment_provider), ''), nullif(trim(payment_phone), ''), payment_note, payment_paynow_reference, payment_paynow_poll_url, 'pending', current_user_id)
+  returning id into new_payment_id;
+
+  return new_payment_id;
+end;
+$$;
+
+revoke all on function public.record_subscription_payment(uuid, numeric, text, text, text, text, text) from public, anon;
+grant execute on function public.record_subscription_payment(uuid, numeric, text, text, text, text, text) to authenticated;
+
+alter table public.subscriptions enable row level security;
+drop policy if exists subscriptions_select_member on public.subscriptions;
+drop policy if exists subscriptions_insert_member on public.subscriptions;
+drop policy if exists subscriptions_update_admin on public.subscriptions;
+drop policy if exists subscriptions_delete_owner on public.subscriptions;
+
+create policy subscriptions_select_member on public.subscriptions for select to authenticated
+  using (public.is_business_member(business_id));
+create policy subscriptions_insert_member on public.subscriptions for insert to authenticated
+  with check (public.is_business_member(business_id) and created_by = (select auth.uid()));
+create policy subscriptions_update_admin on public.subscriptions for update to authenticated
+  using (public.has_business_role(business_id, array['owner','admin']))
+  with check (public.has_business_role(business_id, array['owner','admin']));
+create policy subscriptions_delete_owner on public.subscriptions for delete to authenticated
+  using (public.has_business_role(business_id, array['owner']));
+
+grant select, insert, update, delete on public.subscriptions to authenticated;
+
 -- Profile pictures live in a public avatars bucket. Every user owns a folder
 -- named after their user id, so the policies below keep each account limited
 -- to its own avatar while the public bucket flag lets anyone view pictures.

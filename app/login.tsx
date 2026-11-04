@@ -38,7 +38,7 @@ export default function Login() {
       <Text style={s.sub}>{t.signin}</Text>
       <Field label={t.phoneEmail} placeholder={t.phoneEmail} autoCapitalize="none" value={identifier} onChangeText={setIdentifier} keyboardType="email-address" />
       <PasswordField label={t.password} placeholder={t.password} value={password} onChangeText={setPassword} />
-      <Text style={l.forgot}>{t.forgot}</Text>
+      <Text style={l.forgot} onPress={() => router.push('/forgot-password')}>{t.forgot}</Text>
       <Button label={busy ? 'Signing in…' : t.login} disabled={busy} onPress={() => void doLogin()} />
       <View style={l.orRow}><View style={l.orLine} /><Text style={l.orText}>{t.or}</Text><View style={l.orLine} /></View>
       <Button outline label={t.create} onPress={() => router.push('/signup')} />

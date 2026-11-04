@@ -17,18 +17,31 @@ export function LineChart() {
     const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], cx = (x0 + x1) / 2;
     d += ` C${cx},${y0} ${cx},${y1} ${x1},${y1}`;
   }
+  const yLabels = [0, Math.round(max / 2), max];
   return (
-    <View>
-      <Svg width="100%" height={110} viewBox={`0 0 ${W} ${H + 6}`} preserveAspectRatio="none">
-        <Defs>
-          <LinearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={C.green} stopOpacity="0.22" />
-            <Stop offset="1" stopColor={C.green} stopOpacity="0" />
-          </LinearGradient>
-        </Defs>
-        <Path d={`${d} L${W},${H} L0,${H} Z`} fill="url(#g)" />
-        <Path d={d} stroke={C.green} strokeWidth="2.5" fill="none" />
-      </Svg>
+    <View style={{ marginHorizontal: -8, paddingHorizontal: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
+        <View style={{ width: 28, marginRight: 6, justifyContent: 'space-between', paddingVertical: 4 }}>
+          {yLabels.map((v) => (
+            <Text key={v} style={c.yLabel}>{v}</Text>
+          ))}
+        </View>
+        <View style={{ flex: 1, overflow: 'hidden' }}>
+          <Svg width="100%" height={110} viewBox={`0 0 ${W} ${H + 6}`} preserveAspectRatio="none">
+            <Defs>
+              <LinearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={C.green} stopOpacity="0.22" />
+                <Stop offset="1" stopColor={C.green} stopOpacity="0" />
+              </LinearGradient>
+            </Defs>
+            {yLabels.map((v) => (
+              <Path key={v} d={`M0,${H - (v / max) * H} L${W},${H - (v / max) * H}`} stroke={C.line} strokeWidth="1" strokeDasharray="3,3" />
+            ))}
+            <Path d={`${d} L${W},${H} L0,${H} Z`} fill="url(#g)" />
+            <Path d={d} stroke={C.green} strokeWidth="2.5" fill="none" />
+          </Svg>
+        </View>
+      </View>
       <View style={c.weekRow}>{WEEK_LABELS.map((l) => <Text key={l} style={c.weekLabel}>{l}</Text>)}</View>
     </View>
   );
@@ -71,6 +84,7 @@ export function Donut({ data }: { data: [string, number][] }) {
 }
 
 const c = StyleSheet.create({
-  weekRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 6 },
+  weekRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 6, marginLeft: 30 },
   weekLabel: { color: C.muted, fontSize: 12 },
+  yLabel: { color: C.muted, fontSize: 10, width: 28, textAlign: 'right', marginRight: 4 },
 });

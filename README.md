@@ -2,19 +2,19 @@
 
 ## Supabase backend setup
 
-The app uses Supabase Auth and a per-user `app_state` JSONB row protected by row-level security. No service-role key is used in the client.
+The app uses Supabase Auth and normalized business tables protected by row-level security. Each business row is available only to its members; operational rows carry a `business_id` and are scoped by membership. No service-role key is used in the client.
 
 1. Create a Supabase project.
-2. In **SQL Editor**, run [`supabase/schema.sql`](supabase/schema.sql). This creates `public.app_state`, enables RLS, and restricts each user to their own row.
+2. In **SQL Editor**, run [`supabase/schema.sql`](supabase/schema.sql). This creates the business, product, sales, debtor, debtor payment, reminder, and supporting tables, then enables RLS policies that limit rows to members of the matching business. It also retains `public.app_state` for compatibility with existing user data.
 3. In Supabase **Authentication → Providers**, enable Phone and/or Email according to the signup methods you will support. If email confirmations or phone OTP confirmations are enabled, complete that confirmation flow before expecting an authenticated session.
 4. Copy `.env.example` to `.env` and fill in the Supabase project URL and publishable/anon key from **Project Settings → API**. These are public client credentials protected by RLS; never put the service-role key in the app.
 5. Restart Expo after changing environment variables (`npx expo start -c`).
 
 Without Supabase variables the app intentionally stays in demo mode. With Supabase configured, sign-up and sign-in use Supabase Auth, the session is persisted with Expo SecureStore on native platforms, and each user’s current business state is saved to their own RLS-protected row.
 
-### Current backend scope
+### Backend scope
 
-The initial integration persists the existing app state document (business profile, products, debtors, transactions, reminders, and selected language). It is a starting migration layer, not yet a normalized relational schema. Before production use, migrate these collections into individual tables and add database transactions/RPC functions for coupled operations such as recording a sale and decrementing stock. Configure email/phone verification, password recovery, backups, and production RLS testing before onboarding real customers.
+Business data is stored in tenant-scoped relational tables. Database functions perform coupled operations such as recording a sale while decrementing stock and recording debtor payments. Configure email/phone verification, password recovery, backups, and production RLS testing before onboarding real customers.
 
 ## Run the app
 

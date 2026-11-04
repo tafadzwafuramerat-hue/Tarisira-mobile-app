@@ -1,7 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { Linking } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { Lang, STR, Strings } from '../constants/strings';
-import { supabase, supabaseConfigured } from '../lib/supabase';
+import { supabase, supabaseConfigured, supabaseUrlString } from '../lib/supabase';
 
 export type StockEvent = { id: string | number; label: string; delta: number; date: string };
 export type Product = {
@@ -72,10 +73,11 @@ type Ctx = {
   markPaid: (id: string | number) => void; recordPayment: (id: string | number, amount: number) => Promise<void>;
 
   reminders: Reminder[]; addReminder: (r: Omit<Reminder, 'id' | 'createdLabel'>) => Promise<void>;
+  recordSubscriptionPayment: (amount: number, provider: string, phone: string) => Promise<string | null>;
 
   txs: Tx[]; recordSale: (p: Product, qty: number, customer: string, method: string) => Promise<void>;
 
-  today: number; debtTotal: number; lowCount: number; stockValue: number; cats: [string, number][];
+  today: number; debtTotal: number; lowCount: number; stockValue: number; cats: [string, number][]; hasSubscription: boolean;
 };
 
 const AppContext = createContext<Ctx | null>(null);
@@ -96,6 +98,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [txs, setTxs] = useState<Tx[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [subscriptions, setSubscriptions] = useState<{ id: string; status: string }[]>([]);
 
   useEffect(() => {
     const client = supabase;
@@ -193,7 +196,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let alive = true;
     const loadBusinessData = async () => {
       setAuthLoading(true);
-      const [productResult, movementResult, debtorResult, paymentResult, saleResult, saleItemResult, reminderResult] = await Promise.all([
+      const [productResult, movementResult, debtorResult, paymentResult, saleResult, saleItemResult, reminderResult, subscriptionResult] = await Promise.all([
         client.from('products').select('*').eq('business_id', businessId),
         client.from('stock_movements').select('*').eq('business_id', businessId).order('created_at', { ascending: false }),
         client.from('debtors').select('*').eq('business_id', businessId),
@@ -201,14 +204,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         client.from('sales').select('*').eq('business_id', businessId).order('sold_at', { ascending: false }),
         client.from('sale_items').select('*').eq('business_id', businessId),
         client.from('reminders').select('*, debtors(name,current_balance)').eq('business_id', businessId).order('scheduled_for', { ascending: true }),
+        client.from('subscriptions').select('id,status').eq('business_id', businessId),
       ]);
       if (!alive) return;
-      const errors = [productResult.error, movementResult.error, debtorResult.error, paymentResult.error, saleResult.error, saleItemResult.error, reminderResult.error].filter(Boolean);
+      const errors = [productResult.error, movementResult.error, debtorResult.error, paymentResult.error, saleResult.error, saleItemResult.error, reminderResult.error, subscriptionResult.error].filter(Boolean);
       if (errors.length) {
         console.warn('Could not load normalized business data:', errors.map((error) => error?.message).join('; '));
         setAuthLoading(false);
         return;
       }
+      setSubscriptions((subscriptionResult.data ?? []).map((row) => ({ id: row.id, status: row.status })));
       const movements = movementResult.data ?? [];
       setProducts((productResult.data ?? []).map((row) => ({
         id: row.id, name: row.name, cat: row.category, price: Number(row.price), cost: Number(row.cost),
@@ -298,9 +303,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setBusinessId(null);
     setProducts(supabaseConfigured ? [] : START_PRODUCTS);
     setDebtors(supabaseConfigured ? [] : START_DEBTORS);
-    setTxs([]);
-    setReminders([]);
-    setPhoto(null);
+setTxs([]);
+      setReminders([]);
+      setSubscriptions([]);
+      setPhoto(null);
     setLoadedUserId(null);
   }, []);
 
@@ -497,13 +503,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setTxs((list) => [{ id: Date.now(), name: product.name, cat: product.cat, qty, total, customer, method, date: new Date().toISOString(), time: new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }) }, ...list]);
       },
 
+      recordSubscriptionPayment: async (amount, provider, phone) => {
+        requireBusiness();
+        const client = supabase;
+        if (client && businessId && session?.access_token) {
+          const fnUrl = `${supabaseUrlString}/functions/v1/paynow-create`;
+          const res = await fetch(fnUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ businessId: businessId, amount, phone, method: provider, note: 'Tarisira subscription' }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: 'Payment request failed' }));
+            throw new Error(err.error || 'Payment request failed');
+          }
+          const data = await res.json();
+          setSubscriptions((list) => [...list, { id: data.subscriptionId, status: 'pending' }]);
+          if (data.paynowUrl) {
+            Linking.openURL(data.paynowUrl).catch(() => {});
+          }
+          return data.subscriptionId as string;
+        }
+        return null;
+      },
       today: txs.reduce((sum, sale) => sum + sale.total, 0),
       debtTotal: debtors.reduce((sum, debtor) => sum + debtor.amount, 0),
       lowCount: products.filter((product) => product.qty <= product.reorderAt).length,
       stockValue: products.reduce((sum, product) => sum + product.qty * product.price, 0),
       cats: Object.entries(cats).map(([key, amount]) => [key, Math.round(amount * 100) / 100] as [string, number]),
+      hasSubscription: subscriptions.some((s) => s.status === 'paid'),
     };
-  }, [lang, form, products, debtors, txs, reminders, session, authLoading, businessId, createBusiness, signIn, signUp, signOut, photo]);
+  }, [lang, form, products, debtors, txs, reminders, session, authLoading, businessId, createBusiness, signIn, signUp, signOut, photo, subscriptions]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

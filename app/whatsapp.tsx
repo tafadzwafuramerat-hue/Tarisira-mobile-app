@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { AppIcon } from '../components/AppIcon';
 import { C, SERIF, money } from '../constants/theme';
 import { useApp } from '../context/AppContext';
+import { supabase, supabaseConfigured, supabaseUrlString } from '../lib/supabase';
 
 type Msg = { id: number; from: 'bot' | 'me'; text: string };
 
@@ -34,7 +35,7 @@ function messageLanguage(message: string, fallback: 'en' | 'sn'): 'en' | 'sn' {
 }
 
 export default function WhatsApp() {
-  const { lang, today, txs, debtors, debtTotal, products, lowCount } = useApp();
+  const { lang, today, txs, debtors, debtTotal, products, lowCount, session } = useApp();
   const insets = useSafeAreaInsets();
   const [input, setInput] = useState('');
   const conversationLanguage = useRef<'en' | 'sn'>(lang);
@@ -96,15 +97,48 @@ export default function WhatsApp() {
       : `Sorry, I didn't catch that. Here's what I can help with:\n\n${replyMenu}`;
   };
 
-  const send = () => {
+  const send = async () => {
     const text = input.trim();
     if (!text) return;
     const detectedLanguage = messageLanguage(text, conversationLanguage.current);
     conversationLanguage.current = detectedLanguage;
+    const inShona = detectedLanguage === 'sn';
     const userMsg: Msg = { id: Date.now(), from: 'me', text };
-    const botMsg: Msg = { id: Date.now() + 1, from: 'bot', text: reply(text, detectedLanguage) };
-    setMsgs((l) => [...l, userMsg, botMsg]);
+    setMsgs((l) => [...l, userMsg]);
     setInput('');
+
+    const history = msgs.slice(-6).map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }));
+    const businessContext = {
+      lang: detectedLanguage,
+      today,
+      transactions: txs.length,
+      debtors: debtors.length,
+      debtTotal,
+      products: products.length,
+      lowStock: lowCount,
+    };
+
+    let botText: string;
+    try {
+      if (supabaseConfigured && supabase && session?.access_token) {
+        const res = await fetch(`${supabaseUrlString}/functions/v1/ai-chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ messages: [...history, { role: 'user', content: text }], businessContext }),
+        });
+        const data = await res.json();
+        botText = data.reply || (inShona ? 'Handina kunzwisisa.' : "Sorry, I didn't understand.");
+      } else {
+        botText = reply(text, detectedLanguage);
+      }
+    } catch {
+      botText = reply(text, detectedLanguage);
+    }
+
+    setMsgs((l) => [...l, { id: Date.now() + 1, from: 'bot', text: botText }]);
   };
 
   return (

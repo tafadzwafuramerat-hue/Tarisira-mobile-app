@@ -14,7 +14,10 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "y"
+      "bundleIdentifier": "y",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.tarisira.app"

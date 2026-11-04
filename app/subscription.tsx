@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { Button, Header, Screen } from '../components/ui';
 import { AppIcon } from '../components/AppIcon';
 import { C, SERIF } from '../constants/theme';
+import { useApp } from '../context/AppContext';
 
 const PERKS = [
   'Unlimited products & sales', 'Debt management & reminders', 'Business reports',
@@ -12,6 +13,7 @@ const PERKS = [
 ];
 
 export default function Subscription() {
+  const { hasSubscription } = useApp();
   const daysLeft = 42, trialDays = 60;
   const pct = Math.round(((trialDays - daysLeft) / trialDays) * 100);
   const endDate = new Date(Date.now() + daysLeft * 86400000).toLocaleDateString('en', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -21,8 +23,8 @@ export default function Subscription() {
       <Header title="Subscription" sub="" />
       <View style={v.card}>
         <Text style={v.label}>CURRENT PLAN</Text>
-        <Text style={v.plan}>FREE TRIAL</Text>
-        <Text style={v.days}>{daysLeft} days remaining</Text>
+        <Text style={v.plan}>{hasSubscription ? 'ACTIVE' : 'FREE TRIAL'}</Text>
+        <Text style={v.days}>{hasSubscription ? 'Subscription active' : `${daysLeft} days remaining`}</Text>
         <View style={v.track}><View style={[v.fill, { width: `${pct}%` }]} /></View>
         <Text style={v.muted}>Trial ends {endDate}</Text>
         <View style={v.divider} />
@@ -30,7 +32,7 @@ export default function Subscription() {
         <Text style={v.price}>$3 / month</Text>
       </View>
 
-      <Button label="Subscribe Now" onPress={() => router.push('/subscribe')} />
+      <Button label={hasSubscription ? 'Manage Subscription' : 'Subscribe Now'} onPress={() => router.push('/subscribe')} />
 
       <View style={v.includeCard}>
         <Text style={v.includeTitle}>What's included</Text>

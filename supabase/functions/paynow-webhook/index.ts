@@ -42,14 +42,19 @@ serve(async (req) => {
       return new Response('Invalid signature', { status: 401 });
     }
 
-    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!);
+    const supabase = createClient(SUPABASE_URL!, SERVICE_KEY!);
 
     const paid = status.toLowerCase() === 'paid' || status.toLowerCase() === 'complete';
+    const now = new Date().toISOString();
+    const startDate = now;
+    const endDate = new Date(Date.now() + 60 * 86400000).toISOString();
     const update: Record<string, unknown> = {
-      status: paid ? 'paid' : 'failed',
-      updated_at: new Date().toISOString(),
+      status: paid ? 'active' : 'failed',
+      start_date: paid ? startDate : null,
+      end_date: paid ? endDate : null,
+      updated_at: now,
     };
-    if (paid) update.paid_at = new Date().toISOString();
+    if (paid) update.paid_at = now;
 
     const { error } = await supabase
       .from('subscriptions')

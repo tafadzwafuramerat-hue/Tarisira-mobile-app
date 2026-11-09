@@ -78,16 +78,19 @@ serve(async (req) => {
       .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(data[k])}`)
       .join('&');
 
-    const paynowRes = await fetch(`${PAYNOW_BASE_URL}/pay`, {
+    const paynowRes = await fetch(`${PAYNOW_BASE_URL}/interface/initiatetransaction`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formBody,
     });
-    const paynowText = await paynowRes.text();
+    const paynowData = await paynowRes.json();
 
-    // Paynow returns an HTML page with a poll URL or form action
-    const pollMatch = paynowText.match(/<iframe[^>]*src="([^"]+)"/i) || paynowText.match(/window\.location\.href\s*=\s*'([^']+)'/i);
-    const pollUrl = pollMatch ? pollMatch[1] : null;
+    if (!paynowData.status || paynowData.status.toLowerCase() !== 'ok') {
+      throw new Error(paynowData.error || 'Paynow rejected the request');
+    }
+
+    const pollUrl = paynowData.pollurl || null;
+    const browserUrl = paynowData.browserurl || `${PAYNOW_BASE_URL}/pay`;
 
     const { data: sub, error: subError } = await supabase
       .from('subscriptions')
@@ -111,7 +114,7 @@ serve(async (req) => {
       subscriptionId: sub.id,
       reference,
       pollUrl,
-      paynowUrl: `${PAYNOW_BASE_URL}/pay`,
+      paynowUrl: browserUrl,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });

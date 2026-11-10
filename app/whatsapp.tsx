@@ -97,6 +97,13 @@ export default function WhatsApp() {
       : `Sorry, I didn't catch that. Here's what I can help with:\n\n${replyMenu}`;
   };
 
+  const ACTION_PATTERNS = [
+  /\b(record|sell|sale|buy)\b/i,
+  /\b(pay|payment|record payment)\b/i,
+  /\b(delete|remove)\b/i,
+  /\b(add|create|new product|new debtor)\b/i,
+];
+
   const send = async () => {
     const text = input.trim();
     if (!text) return;
@@ -106,6 +113,22 @@ export default function WhatsApp() {
     const userMsg: Msg = { id: Date.now(), from: 'me', text };
     setMsgs((l) => [...l, userMsg]);
     setInput('');
+
+    // Step 2: Require confirmation for action intents
+    const isAction = ACTION_PATTERNS.some((p) => p.test(text));
+    const isConfirm = /^(yes|confirm|yep|uhu|ekhaya)$/i.test(text.trim());
+    const lastBot = msgs[msgs.length - 1]?.text || '';
+
+    if (isAction && !isConfirm) {
+      setMsgs((l) => [...l, {
+        id: Date.now() + 1,
+        from: 'bot',
+        text: inShona
+          ? 'Izvi zvishoma kusanganisira? Type "yes" kana "confirm" kuti uende mberi.'
+          : 'This looks like an action. Type "yes" or "confirm" to proceed.',
+      }]);
+      return;
+    }
 
     const history = msgs.slice(-6).map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }));
     const businessContext = {

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
+import { Alert, StyleSheet, Switch, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { router } from 'expo-router';
 import { Button, Header, Screen } from '../components/ui';
 import { C } from '../constants/theme';
+import { useApp } from '../context/AppContext';
+import { DEFAULT_PREFS, NotificationPrefs, registerForPushNotificationsAsync } from '../utils/notifications';
 
 type Key = 'sales' | 'lowStock' | 'payments' | 'daily' | 'weekly' | 'marketing';
 const ROWS: { key: Key; title: string; sub: string }[] = [
@@ -16,22 +18,39 @@ const ROWS: { key: Key; title: string; sub: string }[] = [
 ];
 
 export default function Notifications() {
-  const [vals, setVals] = useState<Record<Key, boolean>>({
-    sales: true, lowStock: true, payments: true, daily: false, weekly: false, marketing: false,
-  });
-  const toggle = (k: Key) => setVals((v) => ({ ...v, [k]: !v[k] }));
+  const { notificationPrefs, setNotificationPrefs } = useApp();
+  const [granted, setGranted] = useState<boolean | null>(null);
+  const toggle = (k: Key) => setNotificationPrefs({ ...notificationPrefs, [k]: !notificationPrefs[k] });
+
+  const enable = async () => {
+    const status = await registerForPushNotificationsAsync();
+    if (status === 'granted') {
+      setGranted(true);
+      Alert.alert('Enabled', 'You will receive low stock and sales notifications.');
+    } else {
+      setGranted(false);
+      Alert.alert('Permission denied', 'Enable notifications in your phone settings to get low stock alerts.');
+    }
+  };
 
   return (
     <Screen>
       <Header title="Notifications" sub="" />
       <View style={n.card}>
+        <View style={[n.row, { paddingVertical: 18 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={n.title}>Push Notifications</Text>
+            <Text style={n.sub}>{granted === true ? 'Allowed' : granted === false ? 'Denied' : 'Not set'}</Text>
+          </View>
+          <Button label="Enable" style={{ paddingVertical: 10, paddingHorizontal: 14 }} onPress={enable} />
+        </View>
         {ROWS.map((r, i) => (
           <View key={r.key} style={[n.row, i === ROWS.length - 1 && { borderBottomWidth: 0 }]}>
             <View style={{ flex: 1 }}>
               <Text style={n.title}>{r.title}</Text>
               <Text style={n.sub}>{r.sub}</Text>
             </View>
-            <Switch value={vals[r.key]} onValueChange={() => toggle(r.key)} trackColor={{ true: C.green, false: '#D8E3DD' }} thumbColor="#fff" />
+            <Switch value={notificationPrefs[r.key]} onValueChange={() => toggle(r.key)} trackColor={{ true: C.green, false: '#D8E3DD' }} thumbColor="#fff" />
           </View>
         ))}
       </View>

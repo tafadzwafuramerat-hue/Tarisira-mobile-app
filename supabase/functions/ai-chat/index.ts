@@ -18,7 +18,16 @@ serve(async (req) => {
     const { messages, businessContext } = await req.json();
     if (!messages?.length) return new Response('Messages required', { status: 400 });
 
-    const systemPrompt = `You are Tarisira, a helpful business assistant for small retailers in Zimbabwe. Answer concisely in English or Shona based on the user's language. Business context: ${JSON.stringify(businessContext || {})}.`;
+    const systemPrompt = `You are Tarisira, a helpful business assistant for small retailers in Zimbabwe. Answer concisely in English or Shona based on the user's language.
+
+BUSINESS DATA (authoritative — use ONLY these values):
+${JSON.stringify(businessContext || {})}
+
+CRITICAL RULES:
+1. Answer ONLY using the business data above. Never invent or estimate financial figures.
+2. If a number is not in the data, say "I don't have that data" — do not guess.
+3. For actions (record sale, record payment, delete), respond with a confirmation request: "Confirm: [action]?" and do NOT execute.
+4. Keep answers short and factual.`;
 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',

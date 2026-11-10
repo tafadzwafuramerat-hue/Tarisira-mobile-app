@@ -10,7 +10,8 @@
       "expo-router",
       "expo-sharing",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      "expo-notifications"
     ],
     "ios": {
       "supportsTablet": false,

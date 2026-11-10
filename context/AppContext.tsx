@@ -1,8 +1,10 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { Linking } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { Lang, STR, Strings } from '../constants/strings';
 import { supabase, supabaseConfigured, supabaseUrlString } from '../lib/supabase';
+import { DEFAULT_PREFS, NotificationPrefs, saveNotificationPrefs, scheduleLocalNotification } from '../utils/notifications';
+import { enqueue, getQueue, isOnline, startAutoSync, syncQueue } from '../utils/offlineQueue';
 
 export type StockEvent = { id: string | number; label: string; delta: number; date: string };
 export type Product = {
@@ -78,6 +80,7 @@ type Ctx = {
   txs: Tx[]; recordSale: (p: Product, qty: number, customer: string, method: string) => Promise<void>;
 
   today: number; debtTotal: number; lowCount: number; stockValue: number; cats: [string, number][]; hasSubscription: boolean;
+  notificationPrefs: NotificationPrefs; setNotificationPrefs: (p: NotificationPrefs) => void;
 };
 
 const AppContext = createContext<Ctx | null>(null);
@@ -99,6 +102,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [photo, setPhoto] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<{ id: string; status: string }[]>([]);
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
+  const loadBusinessDataRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     const client = supabase;
@@ -242,8 +247,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })));
       setAuthLoading(false);
     };
+    loadBusinessDataRef.current = loadBusinessData;
     void loadBusinessData();
     return () => { alive = false; };
+  }, [businessId, session?.user.id]);
+
+  // Auto-sync offline queue every 30s when online
+  useEffect(() => {
+    if (!businessId) return;
+    const load = loadBusinessDataRef.current;
+    const timer = startAutoSync(businessId, async (result) => {
+      if (result.synced > 0 && load) {
+        await load();
+      }
+    });
+    // Immediate first sync
+    void (async () => {
+      const online = await isOnline();
+      if (online) {
+        const r = await syncQueue(businessId);
+        if (r.synced > 0 && load) await load();
+      }
+    })();
+    return () => clearInterval(timer);
   }, [businessId, session?.user.id]);
 
   const createBusiness = useCallback(async () => {
@@ -397,23 +423,34 @@ setTxs([]);
         const client = supabase;
         let stockEventId: string | number = Date.now();
         let date = today();
-        if (client && businessId && typeof id === 'string') {
+        const online = client ? await isOnline() : true;
+        if (client && businessId && typeof id === 'string' && online) {
           const { data, error } = await client.rpc('adjust_business_stock', {
             target_business_id: businessId, target_product_id: id, stock_delta: delta, movement_label: label,
           });
           if (error) throw error;
           stockEventId = data as string;
+        } else if (client && businessId && typeof id === 'string') {
+          await enqueue({ type: 'adjustStock', payload: { productId: id, delta, label } });
         }
-        setProducts((list) => list.map((product) => String(product.id) === String(id)
-          ? { ...product, qty: nextQuantity, history: [{ id: stockEventId, label, delta, date }, ...product.history] }
-          : product));
+        setProducts((list) => {
+          const updated = list.map((product) => String(product.id) === String(id)
+            ? { ...product, qty: nextQuantity, history: [{ id: stockEventId, label, delta, date }, ...product.history] }
+            : product);
+          const after = updated.find((product) => String(product.id) === String(id));
+          if (after && after.qty <= after.reorderAt && notificationPrefs.lowStock) {
+            void scheduleLocalNotification('Low Stock Alert', `${after.name} is running low (${after.qty} left)`, { type: 'lowStock', productId: String(after.id) });
+          }
+          return updated;
+        });
       },
 
       debtors,
       addDebtor: async (debtor) => {
         requireBusiness();
         const client = supabase;
-        if (client && businessId) {
+        const online = client ? await isOnline() : true;
+        if (client && businessId && online) {
           const { data, error } = await client.from('debtors').insert({
             business_id: businessId, name: debtor.name, phone: debtor.phone || null,
             item_owed: debtor.item || null,
@@ -422,6 +459,9 @@ setTxs([]);
           if (error) throw error;
           setDebtors((list) => [...list, { id: data.id, name: data.name, phone: data.phone ?? '', item: data.item_owed ?? undefined, amount: Number(data.current_balance), days: data.due_in_days, history: [{ id: data.id, label: 'Debt recorded', sub: 'Initial amount', amount: Number(data.opening_balance), date: today() }] }]);
           return;
+        }
+        if (client && businessId) {
+          await enqueue({ type: 'addDebtor', payload: { name: debtor.name, amount: debtor.amount, days: debtor.days, phone: debtor.phone, item: debtor.item } });
         }
         setDebtors((list) => [...list, {
           id: Date.now(), name: debtor.name, phone: debtor.phone || '+263 77 000 0000', item: debtor.item, amount: debtor.amount, days: debtor.days,
@@ -440,12 +480,15 @@ setTxs([]);
         const payment = Math.min(amount, debtor.amount);
         const client = supabase;
         let paymentEventId: string | number = Date.now();
-        if (client && businessId && typeof id === 'string') {
+        const online = client ? await isOnline() : true;
+        if (client && businessId && typeof id === 'string' && online) {
           const { data, error } = await client.rpc('record_debtor_payment', {
             target_business_id: businessId, target_debtor_id: id, payment_amount: payment, payment_note: 'Recorded payment', method: 'Cash',
           });
           if (error) throw error;
           paymentEventId = data as string;
+        } else if (client && businessId && typeof id === 'string') {
+          await enqueue({ type: 'recordPayment', payload: { debtorId: id, amount: payment } });
         }
         setDebtors((list) => list.map((item) => String(item.id) === String(id)
           ? { ...item, amount: Math.max(0, item.amount - payment), history: [{ id: paymentEventId, label: 'Payment received', sub: 'Recorded payment', amount: -payment, date: today() }, ...item.history] }
@@ -476,7 +519,8 @@ setTxs([]);
         requireBusiness();
         const total = Math.round(product.price * qty * 100) / 100;
         const client = supabase;
-        if (client && businessId && typeof product.id === 'string') {
+        const online = client ? await isOnline() : true;
+        if (client && businessId && typeof product.id === 'string' && online) {
           const { data, error } = await client.rpc('record_business_sale', {
             target_business_id: businessId, target_product_id: product.id, sold_quantity: qty, customer, method,
           });
@@ -491,15 +535,32 @@ setTxs([]);
           if (itemError) throw itemError;
           const date = savedSale.sold_at ?? soldAt;
           const savedTotal = Number(savedItem.line_total ?? total);
-          setProducts((list) => list.map((item) => String(item.id) === String(product.id)
-            ? { ...item, qty: item.qty - qty, history: [{ id: savedItem.id, label: 'Sale', delta: -qty, date: today() }, ...item.history] }
-            : item));
+          setProducts((list) => {
+            const updated = list.map((item) => String(item.id) === String(product.id)
+              ? { ...item, qty: item.qty - qty, history: [{ id: savedItem.id, label: 'Sale', delta: -qty, date: today() }, ...item.history] }
+              : item);
+            const after = updated.find((item) => String(item.id) === String(product.id));
+            if (after && after.qty <= after.reorderAt && notificationPrefs.lowStock) {
+              void scheduleLocalNotification('Low Stock Alert', `${after.name} is running low (${after.qty} left)`, { type: 'lowStock', productId: String(after.id) });
+            }
+            return updated;
+          });
           setTxs((list) => [{ id: savedItem.id, name: product.name, cat: product.cat, qty, total: savedTotal, customer, method, date, time: new Date(date).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }) }, ...list]);
           return;
         }
-        setProducts((list) => list.map((item) => (item.id === product.id
-          ? { ...item, qty: item.qty - qty, history: [{ id: Date.now(), label: 'Sale', delta: -qty, date: today() }, ...item.history] }
-          : item)));
+        if (client && businessId && typeof product.id === 'string') {
+          await enqueue({ type: 'recordSale', payload: { productId: String(product.id), qty, customer, method, price: product.price, name: product.name, cat: product.cat } });
+        }
+        setProducts((list) => {
+          const updated = list.map((item) => (item.id === product.id
+            ? { ...item, qty: item.qty - qty, history: [{ id: Date.now(), label: 'Sale', delta: -qty, date: today() }, ...item.history] }
+            : item));
+          const after = updated.find((item) => item.id === product.id);
+          if (after && after.qty <= after.reorderAt && notificationPrefs.lowStock) {
+            void scheduleLocalNotification('Low Stock Alert', `${after.name} is running low (${after.qty} left)`, { type: 'lowStock', productId: String(after.id) });
+          }
+          return updated;
+        });
         setTxs((list) => [{ id: Date.now(), name: product.name, cat: product.cat, qty, total, customer, method, date: new Date().toISOString(), time: new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }) }, ...list]);
       },
 
@@ -535,8 +596,13 @@ setTxs([]);
       stockValue: products.reduce((sum, product) => sum + product.qty * product.price, 0),
       cats: Object.entries(cats).map(([key, amount]) => [key, Math.round(amount * 100) / 100] as [string, number]),
       hasSubscription: subscriptions.some((s) => s.status === 'paid'),
+      notificationPrefs,
+      setNotificationPrefs: (p: NotificationPrefs) => {
+        setNotificationPrefs(p);
+        void saveNotificationPrefs(p);
+      },
     };
-  }, [lang, form, products, debtors, txs, reminders, session, authLoading, businessId, createBusiness, signIn, signUp, signOut, photo, subscriptions]);
+  }, [lang, form, products, debtors, txs, reminders, session, authLoading, businessId, createBusiness, signIn, signUp, signOut, photo, subscriptions, notificationPrefs]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

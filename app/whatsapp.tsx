@@ -6,10 +6,13 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { AppIcon } from '../components/AppIcon';
 import { C, SERIF, money } from '../constants/theme';
-import { useApp } from '../context/AppContext';
-import { supabase, supabaseConfigured, supabaseUrlString } from '../lib/supabase';
+import { Product, useApp } from '../context/AppContext';
 
 type Msg = { id: number; from: 'bot' | 'me'; text: string };
+type PendingAction =
+  | { type: 'stock'; product: Product; quantity: number }
+  | { type: 'debt'; name: string; amount: number }
+  | { type: 'payment'; debtorId: string | number; name: string; amount: number };
 
 const MENU_EN = '1. Stock\n2. Record Sale\n3. Debtors\n4. Reports\n5. Reminders';
 const MENU_SN = '1. Dura rezvinhu\n2. Nyora zvawatengesa\n3. Zvikwereti\n4. Mishumo\n5. Zviyeuchidzo';
@@ -19,25 +22,34 @@ function messageLanguage(message: string, fallback: 'en' | 'sn'): 'en' | 'sn' {
   if (!/[a-z]/.test(text)) return fallback;
 
   const shonaFrame = /\b(ndinoda|ndiratidze|ndapota|ndibatsire|ndibatsirei|ndinyorere|munogona|ungandiratidza|ndibhadharire)\b/.test(text);
-  const shona = /\b(ndinoda|ndiratidze|ndapota|nhasi|mangwana|chii|mari|ndatengesa|nditengese|tengesa|kutengesa|zvatengesa|dura|zvinhu|zvigadzirwa|ndibatsire|ndibatsirei|ndinyorere|bhadhara|wedzera|bvisa|yangu|yapera)\b|tenges|kweret|mushum|mishum|yeuchidz|chikweret/.test(text);
-  const english = /\b(please|show|tell|what|how|today|tomorrow|sales?|sold|sell|debts?|debtors?|stock|inventory|products?|reports?|reminders?|help|owe|owed|payment|payments)\b/.test(text);
+  const shona = /\b(ndinoda|ndiratidze|ndapota|nhasi|mangwana|chii|mari|ndatengesa|nditengese|tengesa|kutengesa|zvatengesa|dura|zvinhu|zvigadzirwa|ndibatsire|ndibatsirei|ndinyorere|bhadhara|wedzera|bvisa|yangu|yapera|mhoro|mhoroi|masikati|mangwanani)\b|tenges|kweret|mushum|mishum|yeuchidz|chikweret/.test(text);
+  const english = /\b(hi|hello|hey|good|please|show|tell|what|how|today|tomorrow|sales?|sold|sell|debts?|debtors?|stock|inventory|products?|reports?|reminders?|help|owe|owed|payment|payments|add|put|restock|increase|pay)\b/.test(text);
 
   if (shonaFrame) return 'sn';
   if (shona && !english) return 'sn';
   if (english && !shona) return 'en';
   if (shona && english) {
-    const shonaMatches = text.match(/ndinoda|ndiratidze|ndapota|nhasi|mangwana|chii|mari|ndatengesa|nditengese|tenges|kweret|mushum|yeuchidz|dura|zvinhu|zvigadzirwa|ndibatsire|bhadhara|wedzera|bvisa|yangu|yapera/gi)?.length ?? 0;
-    const englishMatches = text.match(/please|show|tell|what|how|today|tomorrow|sales?|sold|sell|debts?|debtors?|stock|inventory|products?|reports?|reminders?|help|owe|owed|payment|payments/gi)?.length ?? 0;
+    const shonaMatches = text.match(/ndinoda|ndiratidze|ndapota|nhasi|mangwana|chii|mari|ndatengesa|nditengese|tenges|kweret|mushum|yeuchidz|dura|zvinhu|zvigadzirwa|ndibatsire|bhadhara|wedzera|bvisa|yangu|yapera|mhoro|mhoroi|masikati|mangwanani/gi)?.length ?? 0;
+    const englishMatches = text.match(/\b(?:hi|hello|hey|good|please|show|tell|what|how|today|tomorrow|sales?|sold|sell|debts?|debtors?|stock|inventory|products?|reports?|reminders?|help|owe|owed|payment|payments|add|put|restock|increase|pay)\b/gi)?.length ?? 0;
     return shonaMatches > englishMatches ? 'sn' : 'en';
   }
 
   return fallback;
 }
 
+function normalizeText(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.$\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeName(text: string): string {
+  return normalizeText(text).replace(/[^a-z0-9]/g, '');
+}
+
 export default function WhatsApp() {
-  const { lang, today, txs, debtors, debtTotal, products, lowCount, session } = useApp();
+  const { lang, today, txs, debtors, debtTotal, products, lowCount, adjustStock, addDebtor, recordPayment } = useApp();
   const insets = useSafeAreaInsets();
   const [input, setInput] = useState('');
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const conversationLanguage = useRef<'en' | 'sn'>(lang);
   const menu = lang === 'sn' ? MENU_SN : MENU_EN;
   const [msgs, setMsgs] = useState<Msg[]>([
@@ -61,10 +73,20 @@ export default function WhatsApp() {
   }, [lang, menu]);
 
   const reply = (q: string, replyLang: 'en' | 'sn'): string => {
-    const t = q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const t = normalizeText(q);
     const inShona = replyLang === 'sn';
     const replyMenu = inShona ? MENU_SN : MENU_EN;
 
+    if (/^(hi|hello|hey|good morning|good afternoon|good evening|mhoro|mhoroi|masikati|mangwanani)$/.test(t)) {
+      return inShona
+        ? `Mhoro! Ndingakubatsirei nhasi?\n\n${replyMenu}\n\nNyora “dura” kuona stock, kana “zvikwereti” kuona vane zvikwereti.`
+        : `Hello! How can I help with your business today?\n\n${replyMenu}\n\nAsk “show stock” or “show debtors,” or type “help” for examples.`;
+    }
+    if (/^(help|menu|start|0|help me|ndibatsire|ndibatsirei)$/.test(t)) {
+      return inShona
+        ? `Ndinogona kukuratidza stock, zvawatengesa, zvikwereti, mishumo, nezviyeuchidzo.\n\nKuwedzera stock: “wedzera [zita rechigadzirwa] [nhamba]”\nKunyora chikwereti: “chikwereti [zita] [mari]”\n\n${replyMenu}`
+        : `I can show stock, sales, debtors, reports, and reminders. You can also:\n• Add stock: “add [product] [quantity]”\n• Add a debt: “add debt [name] [$amount]”\n• Record a payment: “pay [name] [$amount]”\n\n${replyMenu}`;
+    }
     if (/\b(sold|sale|sales|sell)\b|tenges/.test(t) || t === '2') {
       const best = products[0]?.name || 'N/A';
       return inShona
@@ -78,9 +100,10 @@ export default function WhatsApp() {
         : `Outstanding debtors:\n\n${lines || 'None'}\n\nTotal: ${money(debtTotal)}\n\nType PAY [name] [amount] to record payment.`;
     }
     if (/\b(stock|inventory)\b|dura|zvinhu|zvigadzirwa/.test(t) || t === '1') {
+      const stockList = products.map((product) => `• ${product.name}: ${product.qty}`).join('\n');
       return inShona
-        ? `Une zvigadzirwa ${products.length}.\nZvigadzirwa ${lowCount} zvava kupera mudura.`
-        : `You have ${products.length} products.\n${lowCount} running low on stock.`;
+        ? `Une zvigadzirwa ${products.length}; ${lowCount} zvava kupera mudura.\n\n${stockList || 'Hapana zvigadzirwa zvanyorwa.'}`
+        : `You have ${products.length} products; ${lowCount} are running low.\n\n${stockList || 'No products have been added yet.'}`;
     }
     if (/\b(report|reports)\b|mushum|mishum/.test(t) || t === '4') {
       return inShona
@@ -93,16 +116,9 @@ export default function WhatsApp() {
         : 'Open the Reminders screen in the app to schedule one, or type: REMIND [name].';
     }
     return inShona
-      ? `Tine urombo, handina kunzwisisa. Ndinogona kukubatsira nezvinotevera:\n\n${replyMenu}`
-      : `Sorry, I didn't catch that. Here's what I can help with:\n\n${replyMenu}`;
+      ? `Ndinogona kubatsira nezve stock, zvawatengesa, zvikwereti, mishumo, uye zviyeuchidzo. Nyora “ndibatsire” kuti uone mienzaniso.\n\n${replyMenu}`
+      : `I can help with stock, sales, debts, reports, and reminders. Type “help” to see examples.\n\n${replyMenu}`;
   };
-
-  const ACTION_PATTERNS = [
-  /\b(record|sell|sale|buy)\b/i,
-  /\b(pay|payment|record payment)\b/i,
-  /\b(delete|remove)\b/i,
-  /\b(add|create|new product|new debtor)\b/i,
-];
 
   const send = async () => {
     const text = input.trim();
@@ -110,58 +126,113 @@ export default function WhatsApp() {
     const detectedLanguage = messageLanguage(text, conversationLanguage.current);
     conversationLanguage.current = detectedLanguage;
     const inShona = detectedLanguage === 'sn';
-    const userMsg: Msg = { id: Date.now(), from: 'me', text };
-    setMsgs((l) => [...l, userMsg]);
+    setMsgs((list) => [...list, { id: Date.now(), from: 'me', text }]);
     setInput('');
 
-    // Step 2: Require confirmation for action intents
-    const isAction = ACTION_PATTERNS.some((p) => p.test(text));
-    const isConfirm = /^(yes|confirm|yep|uhu|ekhaya)$/i.test(text.trim());
-    const lastBot = msgs[msgs.length - 1]?.text || '';
+    const t = normalizeText(text);
+    const affirmative = /^(yes|y|yeah|yep|confirm|ok|okay|uhu|hongu|ehe)$/.test(t);
+    const negative = /^(no|n|nope|cancel|cancel it|stop|kwete|ramba)$/.test(t);
+    if (pendingAction) {
+      if (negative) {
+        setPendingAction(null);
+        setMsgs((list) => [...list, { id: Date.now() + 1, from: 'bot', text: inShona ? 'Zvaita, hapana chachinjwa.' : 'Cancelled. Nothing was changed.' }]);
+        return;
+      }
+      if (!affirmative) {
+        setMsgs((list) => [...list, { id: Date.now() + 1, from: 'bot', text: inShona ? 'Pindura “hongu” kuti usimbise kana “kwete” kukanzura.' : 'Reply “yes” to confirm or “no” to cancel this action.' }]);
+        return;
+      }
 
-    if (isAction && !isConfirm) {
-      setMsgs((l) => [...l, {
-        id: Date.now() + 1,
-        from: 'bot',
-        text: inShona
-          ? 'Izvi zvishoma kusanganisira? Type "yes" kana "confirm" kuti uende mberi.'
-          : 'This looks like an action. Type "yes" or "confirm" to proceed.',
-      }]);
+      const action = pendingAction;
+      setPendingAction(null);
+      try {
+        if (action.type === 'stock') {
+          await adjustStock(action.product.id, action.quantity, 'Stock added via assistant');
+          setMsgs((list) => [...list, { id: Date.now() + 1, from: 'bot', text: inShona ? `Zvaita — stock ye${action.product.name} yawedzerwa ne${action.quantity}.` : `Done — added ${action.quantity} to ${action.product.name}.` }]);
+        } else if (action.type === 'debt') {
+          await addDebtor({ name: action.name, amount: action.amount, days: 30 });
+          setMsgs((list) => [...list, { id: Date.now() + 1, from: 'bot', text: inShona ? `Chikwereti cha${action.name} chanyorwa: ${money(action.amount)}.` : `Debt recorded for ${action.name}: ${money(action.amount)}.` }]);
+        } else {
+          await recordPayment(action.debtorId, action.amount);
+          setMsgs((list) => [...list, { id: Date.now() + 1, from: 'bot', text: inShona ? `Mubhadharo wa${action.name} wanyorwa: ${money(action.amount)}.` : `Payment recorded for ${action.name}: ${money(action.amount)}.` }]);
+        }
+      } catch (error) {
+        console.error('Assistant action failed:', error);
+        const details = error instanceof Error ? ` ${error.message}` : '';
+        setMsgs((list) => [...list, { id: Date.now() + 1, from: 'bot', text: inShona ? `Handina kukwanisa kuita izvozvo.${details}` : `I couldn't complete that action.${details}` }]);
+      }
       return;
     }
 
-    const history = msgs.slice(-6).map((m) => ({ role: m.from === 'me' ? 'user' : 'assistant', content: m.text }));
-    const businessContext = {
-      lang: detectedLanguage,
-      today,
-      transactions: txs.length,
-      debtors: debtors.length,
-      debtTotal,
-      products: products.length,
-      lowStock: lowCount,
-    };
+    const owesIntent = !/^(?:who|what|how)\b/.test(t) && /^.+\s+owes?(?:\s+me)?\s+\$?\d/.test(t);
+    const debtIntent = /\b(?:add|record|create)\s+(?:a\s+)?(?:debt|debtor|chikwereti)\b/.test(t)
+      || /^(?:debt|debtor|chikwereti)\s+.+\s+\$?\d/.test(t)
+      || owesIntent;
+    const paymentIntent = /\b(?:pay|record payment|bhadhara)\b/.test(t);
+    const stockIntent = /^(?:please\s+)?(?:add|put|restock|increase|stock up|wedzera)\b/.test(t);
+    let action: PendingAction | null = null;
+    let actionError = '';
 
-    let botText: string;
-    try {
-      if (supabaseConfigured && supabase && session?.access_token) {
-        const res = await fetch(`${supabaseUrlString}/functions/v1/ai-chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ messages: [...history, { role: 'user', content: text }], businessContext }),
-        });
-        const data = await res.json();
-        botText = data.reply || (inShona ? 'Handina kunzwisisa.' : "Sorry, I didn't understand.");
+    if (debtIntent) {
+      const match = t.match(/^(?:please\s+)?(?:add|record|create)\s+(?:a\s+)?(?:debt|debtor|chikwereti)\s+(?:for\s+)?(.+?)(?:\s+of)?\s+\$?(\d+(?:\.\d{1,2})?)$/)
+        || t.match(/^(?:debt|debtor|chikwereti)\s+(?:for\s+)?(.+?)(?:\s+of)?\s+\$?(\d+(?:\.\d{1,2})?)$/)
+        || t.match(/^(.+?)\s+owes?(?:\s+me)?\s+\$?(\d+(?:\.\d{1,2})?)$/);
+      const name = match?.[1]?.replace(/\s+(?:of|for)$/, '').trim() ?? '';
+      const amount = Number(match?.[2]);
+      if (!name || !Number.isFinite(amount) || amount <= 0) {
+        actionError = inShona ? 'Nyora: chikwereti [zita] [mari], semuenzaniso “chikwereti Tawanda 20”.' : 'Use: add debt [name] [$amount], for example “add debt Tawanda $20”.';
       } else {
-        botText = reply(text, detectedLanguage);
+        action = { type: 'debt', name, amount };
       }
-    } catch {
-      botText = reply(text, detectedLanguage);
+    } else if (paymentIntent) {
+      const match = t.match(/^(?:(?:please\s+)?record\s+payment|pay|bhadhara)\s+(?:for\s+)?(.+?)\s+\$?(\d+(?:\.\d{1,2})?)$/);
+      const name = match?.[1]?.trim() ?? '';
+      const amount = Number(match?.[2]);
+      const debtor = debtors.find((item) => normalizeName(item.name) === normalizeName(name));
+      if (!name || !Number.isFinite(amount) || amount <= 0) {
+        actionError = inShona ? 'Nyora: bhadhara [zita] [mari].' : 'Use: pay [name] [$amount], for example “pay Tawanda $10”.';
+      } else if (!debtor) {
+        actionError = inShona ? `Handina kuwana chikwereti cha${name}.` : `I couldn't find an outstanding debt for ${name}.`;
+      } else {
+        action = { type: 'payment', debtorId: debtor.id, name: debtor.name, amount };
+      }
+    } else if (stockIntent) {
+      const qtyFirst = t.match(/^(?:please\s+)?(?:add|put|restock|increase|stock up|wedzera)(?:\s+stock)?(?:\s+of)?\s+(\d+)\s+(?:to\s+)?(.+)$/);
+      const nameFirst = t.match(/^(?:please\s+)?(?:add|put|restock|increase|stock up|wedzera)(?:\s+stock)?(?:\s+of)?\s+(.+?)(?:\s+by)?\s+(\d+)$/);
+      const quantity = Number(qtyFirst?.[1] ?? nameFirst?.[2]);
+      const productName = (qtyFirst?.[2] ?? nameFirst?.[1] ?? '').replace(/^(?:to|of)\s+/, '').trim();
+      const product = products.find((item) => normalizeName(item.name) === normalizeName(productName));
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        actionError = inShona ? 'Nyora: wedzera [zita rechigadzirwa] [nhamba].' : 'Use: add [product name] [positive whole quantity], for example “add Bread 5”.';
+      } else if (!product) {
+        actionError = inShona ? `Handina kuwana “${productName || text}” paStock. Tarisa zita rechigadzirwa.` : `I couldn't find “${productName || text}” in your stock. Check the product name on the Stock screen.`;
+      } else {
+        action = { type: 'stock', product, quantity };
+      }
     }
 
-    setMsgs((l) => [...l, { id: Date.now() + 1, from: 'bot', text: botText }]);
+    if (actionError) {
+      setMsgs((list) => [...list, { id: Date.now() + 1, from: 'bot', text: actionError }]);
+      return;
+    }
+    if (action) {
+      setPendingAction(action);
+      const prompt = action.type === 'stock'
+        ? (inShona
+          ? `Ndiwedzere stock ye${action.product.name} ne${action.quantity}? Pindura “hongu” kusimbisa kana “kwete” kukanzura.`
+          : `Add ${action.quantity} to ${action.product.name}? Reply “yes” to confirm or “no” to cancel.`)
+        : action.type === 'debt'
+          ? (inShona
+            ? `Ndinonyore chikwereti cha${action.name}: ${money(action.amount)}? Pindura “hongu” kusimbisa kana “kwete” kukanzura.`
+            : `Record a debt of ${money(action.amount)} for ${action.name}? Reply “yes” to confirm or “no” to cancel.`)
+          : (inShona
+            ? `Ndinonyore mubhadharo wa${action.name}: ${money(action.amount)}? Pindura “hongu” kusimbisa kana “kwete” kukanzura.`
+            : `Record a payment of ${money(action.amount)} for ${action.name}? Reply “yes” to confirm or “no” to cancel.`);
+      setMsgs((list) => [...list, { id: Date.now() + 1, from: 'bot', text: prompt }]);
+      return;
+    }
+
+    setMsgs((list) => [...list, { id: Date.now() + 1, from: 'bot', text: reply(text, detectedLanguage) }]);
   };
 
   return (
@@ -172,7 +243,7 @@ export default function WhatsApp() {
         <View style={w.avatar}><AppIcon name="leaf" size={20} color={C.dark} /></View>
         <View>
           <Text style={w.title}>Tarisira</Text>
-          <Text style={w.subtitle}>Business Assistant · Online</Text>
+          <Text style={w.subtitle}>{lang === 'sn' ? 'Mubatsiri wemuno · Hapana internet' : 'Free assistant · Works offline'}</Text>
         </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: 14 }}>

@@ -6,11 +6,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const PAYNOW_MERCHANT_ID = Deno.env.get('PAYNOW_MERCHANT_ID');
-const PAYNOW_MERCHANT_KEY = Deno.env.get('PAYNOW_MERCHANT_KEY');
+const PAYNOW_MERCHANT_ID = Deno.env.get('PAYNOW_MERCHANT_ID') ?? '';
+const PAYNOW_MERCHANT_KEY = Deno.env.get('PAYNOW_MERCHANT_KEY') ?? '';
 const PAYNOW_BASE_URL = Deno.env.get('PAYNOW_BASE_URL') || 'https://www.paynow.co.zw';
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
 async function hashData(data: Record<string, string>, key: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -59,20 +59,20 @@ serve(async (req) => {
     const callbackurl = `${SUPABASE_URL}/functions/v1/paynow-webhook`;
 
     const data: Record<string, string> = {
-      merchant_id: PAYNOW_MERCHANT_ID!,
-      merchant_key: PAYNOW_MERCHANT_KEY!,
+      merchant_id: PAYNOW_MERCHANT_ID,
+      merchant_key: PAYNOW_MERCHANT_KEY,
       amount: String(amount),
       reference,
-      email: user.email || '',
+      email: user.email ?? '',
       phone,
-      first_name: user.user_metadata?.full_name || 'Customer',
+      first_name: String(user.user_metadata?.full_name ?? 'Customer'),
       last_name: 'Tarisira',
-      description: note || 'Tarisira subscription',
+      description: note ?? 'Tarisira subscription',
       transaction_id: reference,
       returnurl,
       callbackurl,
     };
-    data['hash'] = await hashData(data, PAYNOW_MERCHANT_KEY!);
+    data['hash'] = await hashData(data, PAYNOW_MERCHANT_KEY);
 
     const formBody = Object.keys(data)
       .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(data[k])}`)
@@ -83,10 +83,15 @@ serve(async (req) => {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formBody,
     });
-    const paynowData = await paynowRes.json();
+    const paynowData = await paynowRes.json() as {
+      status?: string;
+      error?: string;
+      pollurl?: string;
+      browserurl?: string;
+    };
 
     if (!paynowData.status || paynowData.status.toLowerCase() !== 'ok') {
-      throw new Error(paynowData.error || 'Paynow rejected the request');
+      throw new Error(paynowData.error ?? 'Paynow rejected the request');
     }
 
     const pollUrl = paynowData.pollurl || null;
@@ -117,6 +122,10 @@ serve(async (req) => {
       paynowUrl: browserUrl,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    const message = err instanceof Error ? err.message : String(err);
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 });

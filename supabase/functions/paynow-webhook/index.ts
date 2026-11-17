@@ -1,6 +1,7 @@
 // Supabase Edge Function: paynow-webhook
-// Receives Paynow status updates and marks subscriptions as paid/failed.
+// Receives Paynow status updates and marks subscriptions as active/failed.
 // Deploy with: supabase functions deploy paynow-webhook
+// Secret: SERVICE_ROLE_KEY, PAYNOW_MERCHANT_KEY
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -12,13 +13,22 @@ const SERVICE_KEY = Deno.env.get('SERVICE_ROLE_KEY');
 async function hashData(data: Record<string, string>, key: string): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(key);
-  const message = Object.keys(data).sort().map(k => `${k}=${data[k]}`).join('&');
+  const message = Object.keys(data)
+    .sort()
+    .map((k) => `${k}=${data[k]}`)
+    .join('&');
   const msgData = encoder.encode(message);
   const cryptoKey = await crypto.subtle.importKey(
-    'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
   );
   const signature = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
-  return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 serve(async (req) => {
@@ -30,14 +40,17 @@ serve(async (req) => {
     const fields: Record<string, string> = {};
     for (const [k, v] of formData.entries()) fields[k] = String(v);
 
-    const { reference, status, amount, paynowreference, hash } = fields;
+    const { reference, status, hash } = fields;
     if (!reference || !status) {
       return new Response('Missing fields', { status: 400 });
     }
 
-    // Verify hash signature
-    const { hash: _, ...data } = fields;
-    const expectedHash = await hashData(data, PAYNOW_MERCHANT_KEY!);
+    // Verify hash signature over every field except hash itself.
+    const data: Record<string, string> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (k !== 'hash') data[k] = v;
+    }
+    const expectedHash = await hashData(data, PAYNOW_MERCHANT_KEY ?? '');
     if (hash !== expectedHash) {
       return new Response('Invalid signature', { status: 401 });
     }
@@ -46,12 +59,12 @@ serve(async (req) => {
 
     const paid = status.toLowerCase() === 'paid' || status.toLowerCase() === 'complete';
     const now = new Date().toISOString();
-    const startDate = now;
-    const endDate = new Date(Date.now() + 60 * 86400000).toISOString();
+    const endDate = paid ? new Date(Date.now() + 60 * 86400000).toISOString() : null;
+
     const update: Record<string, unknown> = {
       status: paid ? 'active' : 'failed',
-      start_date: paid ? startDate : null,
-      end_date: paid ? endDate : null,
+      start_date: paid ? now : null,
+      end_date: endDate,
       updated_at: now,
     };
     if (paid) update.paid_at = now;
@@ -65,6 +78,10 @@ serve(async (req) => {
 
     return new Response('OK', { status: 200 });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    const message = err instanceof Error ? err.message : String(err);
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 });

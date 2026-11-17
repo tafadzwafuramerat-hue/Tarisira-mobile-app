@@ -20,13 +20,44 @@ export const DEFAULT_PREFS: NotificationPrefs = {
   marketing: false,
 };
 
-// Configure notification channel on Android
+type AppStateRow = {
+  user_id: string;
+  data: Record<string, unknown> & {
+    pushToken?: string;
+    notificationPrefs?: Partial<NotificationPrefs>;
+    businessId?: string;
+  };
+  updated_at: string;
+};
+
 if (Platform.OS === 'android') {
-  Notifications.setNotificationChannelAsync('default', {
+  void Notifications.setNotificationChannelAsync('default', {
     name: 'default',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#00A86B',
+  });
+}
+
+// app_state stores one row per user with a JSON blob. Every write must merge
+// with the existing blob, otherwise one key wipes the others.
+async function readState(userId: string): Promise<Record<string, unknown>> {
+  if (!supabase) return {};
+  const { data } = await supabase
+    .from('app_state')
+    .select('data')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return ((data as { data?: Record<string, unknown> } | null)?.data ?? {}) as Record<string, unknown>;
+}
+
+async function writeState(userId: string, patch: Record<string, unknown>): Promise<void> {
+  if (!supabase) return;
+  const existing = await readState(userId);
+  await supabase.from('app_state').upsert({
+    user_id: userId,
+    data: { ...existing, ...patch },
+    updated_at: new Date().toISOString(),
   });
 }
 
@@ -42,21 +73,19 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
   if (finalStatus !== 'granted') return null;
 
-  // Save push token to Supabase (best-effort)
   try {
     if (supabaseConfigured && supabase) {
-      const tokenData = await Notifications.getExpoPushTokenAsync();
       const { data: { user } } = await supabase.auth.getUser();
-      if (user && tokenData?.data) {
-        await supabase.from('app_state').upsert({
-          user_id: user.id,
-          data: { pushToken: tokenData.data },
-          updated_at: new Date().toISOString(),
-        });
+      if (user) {
+        const tokenData = await Notifications.getExpoPushTokenAsync().catch(() => null);
+        const token = tokenData?.data;
+        if (token) {
+          await writeState(user.id, { pushToken: token });
+        }
       }
     }
-  } catch (e) {
-    // non-fatal
+  } catch {
+    // non-fatal: token registration must never block the app
   }
   return finalStatus;
 }
@@ -64,14 +93,14 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 export async function scheduleLocalNotification(
   title: string,
   body: string,
-  data: Record<string, unknown> = {}
+  data: Record<string, unknown> = {},
 ): Promise<void> {
   try {
     await Notifications.scheduleNotificationAsync({
       content: { title, body, data, sound: 'default' },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 0 },
+      trigger: null,
     });
-  } catch (e) {
+  } catch {
     // ignore
   }
 }
@@ -81,14 +110,10 @@ export async function saveNotificationPrefs(prefs: NotificationPrefs): Promise<v
     if (supabaseConfigured && supabase) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await supabase.from('app_state').upsert({
-          user_id: user.id,
-          data: { notificationPrefs: prefs },
-          updated_at: new Date().toISOString(),
-        });
+        await writeState(user.id, { notificationPrefs: prefs });
       }
     }
-  } catch (e) {
+  } catch {
     // non-fatal
   }
 }
@@ -98,13 +123,26 @@ export async function loadNotificationPrefs(): Promise<NotificationPrefs> {
     if (supabaseConfigured && supabase) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data } = await supabase.from('app_state').select('data').eq('user_id', user.id).maybeSingle();
-        const prefs = data?.data?.notificationPrefs;
+        const state = await readState(user.id);
+        const prefs = state.notificationPrefs as Partial<NotificationPrefs> | undefined;
         if (prefs) return { ...DEFAULT_PREFS, ...prefs };
       }
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
   return DEFAULT_PREFS;
+}
+
+export async function savePushBusinessId(businessId: string): Promise<void> {
+  try {
+    if (supabaseConfigured && supabase) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await writeState(user.id, { businessId });
+      }
+    }
+  } catch {
+    // non-fatal
+  }
 }

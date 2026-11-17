@@ -3,7 +3,7 @@ import { Linking } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { Lang, STR, Strings } from '../constants/strings';
 import { supabase, supabaseConfigured, supabaseUrlString } from '../lib/supabase';
-import { DEFAULT_PREFS, NotificationPrefs, saveNotificationPrefs, scheduleLocalNotification } from '../utils/notifications';
+import { DEFAULT_PREFS, NotificationPrefs, saveNotificationPrefs, scheduleLocalNotification, savePushBusinessId } from '../utils/notifications';
 import { enqueue, getQueue, isOnline, startAutoSync, syncQueue } from '../utils/offlineQueue';
 
 export type StockEvent = { id: string | number; label: string; delta: number; date: string };

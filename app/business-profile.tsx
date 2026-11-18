@@ -4,6 +4,7 @@ import { LocalizedText as Text } from '../components/LocalizedText';
 import { router } from 'expo-router';
 import { Button, Field, Header, Screen, s } from '../components/ui';
 import { AppIcon } from '../components/AppIcon';
+import { BrandSymbol } from '../components/BrandSymbol';
 import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
 import { pickAvatar } from '../utils/pickAvatar';
@@ -22,7 +23,7 @@ export default function BusinessProfile() {
           {photo ? (
             <Image source={{ uri: photo }} style={p.avatar} />
           ) : (
-            <View style={p.avatar}><AppIcon name="leaf" size={36} color="#fff" /></View>
+            <View style={p.avatar}><BrandSymbol size={60} reversed /></View>
           )}
           <View style={p.editBadge}><AppIcon name="pencil" size={13} color="#fff" /></View>
         </View>

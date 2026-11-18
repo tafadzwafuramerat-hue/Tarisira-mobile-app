@@ -1,13 +1,20 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { supabase, supabaseConfigured } from '../lib/supabase';
+import { harareDueDate } from './debtReminderSchedule';
 
 const QUEUE_KEY = 'tarisira_offline_queue_v1';
 
 export type OfflineAction =
   | { type: 'recordSale'; payload: { productId: string; qty: number; customer: string; method: string; price: number; name: string; cat: string } }
   | { type: 'adjustStock'; payload: { productId: string; delta: number; label: string } }
-  | { type: 'addDebtor'; payload: { name: string; amount: number; days: number; phone?: string; item?: string } }
+  | {
+      type: 'addDebtor';
+      payload: {
+        name: string; amount: number; days: number; phone?: string; item?: string;
+        due_at?: string; owner_approved_reminders?: boolean; customer_sms_opt_in?: boolean; customer_whatsapp_opt_in?: boolean;
+      };
+    }
   | { type: 'recordPayment'; payload: { debtorId: string; amount: number } };
 
 export type QueueEntry = {
@@ -88,6 +95,10 @@ export async function syncQueue(businessId: string): Promise<{ synced: number; f
         const { error } = await supabase!.from('debtors').insert({
           business_id: businessId, name: p.name, phone: p.phone || null, item_owed: p.item || null,
           opening_balance: p.amount, current_balance: p.amount, due_in_days: p.days,
+          due_at: p.due_at ?? harareDueDate(p.days).toISOString(),
+          owner_approved_reminders: p.owner_approved_reminders ?? false,
+          customer_sms_opt_in: p.customer_sms_opt_in ?? false,
+          customer_whatsapp_opt_in: p.customer_whatsapp_opt_in ?? false,
         });
         if (error) throw error;
       } else if (entry.action.type === 'recordPayment') {

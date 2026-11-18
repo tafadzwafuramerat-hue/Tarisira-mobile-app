@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Image, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { router } from 'expo-router';
 import { Button, Field, PasswordField, Screen, s } from '../components/ui';
-import { AppIcon } from '../components/AppIcon';
-import { C, SERIF } from '../constants/theme';
+import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
 import { errorMessage } from '../utils/errors';
 
@@ -30,10 +29,7 @@ export default function Login() {
   };
   return (
     <Screen>
-      <View style={l.logoRow}>
-        <View style={l.logoBox}><AppIcon name="leaf" size={21} color="#fff" /></View>
-        <Text style={l.logoText}>TARISIRA</Text>
-      </View>
+      <Image source={require('../assets/tarisira-logo-primary.png')} style={l.logo} resizeMode="contain" />
       <Text style={[s.h1, { marginTop: 24 }]}>{t.welcome}</Text>
       <Text style={s.sub}>{t.signin}</Text>
       <Field label={t.phoneEmail} placeholder={t.phoneEmail} autoCapitalize="none" value={identifier} onChangeText={setIdentifier} keyboardType="email-address" />
@@ -48,9 +44,7 @@ export default function Login() {
 }
 
 const l = StyleSheet.create({
-  logoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  logoBox: { width: 38, height: 38, borderRadius: 10, backgroundColor: C.dark, alignItems: 'center', justifyContent: 'center' },
-  logoText: { fontFamily: SERIF, fontSize: 22, fontWeight: '800', color: C.dark, letterSpacing: 1 },
+  logo: { width: 250, height: 70, alignSelf: 'center', marginBottom: 8 },
   forgot: { textAlign: 'right', color: C.green, fontWeight: '700', fontSize: 13, marginBottom: 20 },
   orRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 14 },
   orLine: { flex: 1, height: 1, backgroundColor: C.line },

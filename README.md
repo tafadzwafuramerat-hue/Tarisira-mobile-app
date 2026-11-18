@@ -6,15 +6,62 @@ The app uses Supabase Auth and normalized business tables protected by row-level
 
 1. Create a Supabase project.
 2. In **SQL Editor**, run [`supabase/schema.sql`](supabase/schema.sql). This creates the business, product, sales, debtor, debtor payment, reminder, and supporting tables, then enables RLS policies that limit rows to members of the matching business. It also retains `public.app_state` for compatibility with existing user data.
-3. In Supabase **Authentication → Providers**, enable Phone and/or Email according to the signup methods you will support. If email confirmations or phone OTP confirmations are enabled, complete that confirmation flow before expecting an authenticated session.
+3. In Supabase **Authentication → Sign In / Providers**, enable Phone and/or Email according to the signup methods you will support. For phone sign-in and password recovery, configure an SMS provider and an SMS OTP template containing `{{ .Code }}`. Phone recovery sends a code only to an existing account's phone number; enter it in international format (for example, `+263771234567`).
 4. Copy `.env.example` to `.env` and fill in the Supabase project URL and publishable/anon key from **Project Settings → API**. These are public client credentials protected by RLS; never put the service-role key in the app.
 5. Restart Expo after changing environment variables (`npx expo start -c`).
+
+### Tarisira password-reset email branding
+
+Email password-reset links are sent by Supabase Auth. In the Supabase Dashboard, go to **Authentication → Email Templates → Reset Password**, set the subject to `Reset your Tarisira password`, and use [`supabase/templates/password-recovery.html`](supabase/templates/password-recovery.html) as the email body. The template includes the required `{{ .ConfirmationURL }}` link.
+
+To make the sender show as **Tarisira** in the recipient’s inbox, configure a custom SMTP provider under **Project Settings → Authentication → SMTP Settings** (or **Authentication → SMTP Settings**, depending on the Dashboard layout) and set its sender name to `Tarisira`. The email template controls the message contents; the SMTP sender configuration controls the sender display name. Changing app code alone cannot change either setting for the hosted Supabase project.
 
 Without Supabase variables the app intentionally stays in demo mode. With Supabase configured, sign-up and sign-in use Supabase Auth, the session is persisted with Expo SecureStore on native platforms, and each user’s current business state is saved to their own RLS-protected row.
 
 ### Backend scope
 
 Business data is stored in tenant-scoped relational tables. Database functions perform coupled operations such as recording a sale while decrementing stock and recording debtor payments. Configure email/phone verification, password recovery, backups, and production RLS testing before onboarding real customers.
+
+### Automatic debt reminders
+
+Automatic reminders require the owner’s approval and the debtor’s consent to both SMS and WhatsApp. When a debtor with a valid phone number is saved, the database queues reminders for 09:00 Africa/Harare exactly 24 hours before the due date. The sender checks that a balance is still outstanding and consent is still enabled. Phone numbers must use international E.164 format (for example, `+263771234567`).
+
+For an existing project, run [`supabase/debt-reminders-setup.sql`](supabase/debt-reminders-setup.sql) in the Supabase SQL Editor. For a new project, `supabase/schema.sql` already includes the reminder schema. Both scripts notify PostgREST to reload its schema cache after adding the columns.
+
+If saving a debtor reports that `customer_sms_opt_in` is missing from the schema cache, the existing Supabase database has not received this setup yet. Open **Supabase Dashboard → SQL Editor**, run the existing-project setup script above, wait for it to finish successfully, and then retry. The migration is safe to rerun and keeps existing debtor records.
+
+1. In Twilio, configure an SMS sender or Messaging Service and an approved WhatsApp sender. Submit and approve a WhatsApp Content Template with four variables, in order: debtor name, business name, amount and optional item owed, and due date.
+2. Deploy the Edge Function and set its secrets from a secure terminal (never add these credentials to the app or commit them):
+
+   ```sh
+   supabase functions deploy send-debt-reminders
+   supabase secrets set TWILIO_ACCOUNT_SID=AC... TWILIO_AUTH_TOKEN=... TWILIO_SMS_FROM=+263... TWILIO_WHATSAPP_FROM=whatsapp:+14155238886 TWILIO_WHATSAPP_CONTENT_SID=HX...
+   ```
+
+   Use `TWILIO_MESSAGING_SERVICE_SID=MG...` instead of `TWILIO_SMS_FROM` if sending SMS through a Messaging Service. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided to the deployed function by Supabase.
+3. In the Supabase Dashboard, enable `pg_cron`, `pg_net`, and Vault. Store the project URL and service-role key as Vault secrets named `supabase_url` and `supabase_service_role_key`. Do not put the service-role key in the mobile app or expose it in source control.
+4. In the SQL Editor, schedule the function every five minutes. This request is authenticated with the Vault secret, so only the database scheduler can invoke the function:
+
+   ```sql
+   select cron.schedule(
+     'send-debt-reminders-every-five-minutes',
+     '*/5 * * * *',
+     $job$
+       select net.http_post(
+         url := (select decrypted_secret from vault.decrypted_secrets where name = 'supabase_url')
+           || '/functions/v1/send-debt-reminders',
+         headers := jsonb_build_object(
+           'Content-Type', 'application/json',
+           'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'supabase_service_role_key'),
+           'apikey', (select decrypted_secret from vault.decrypted_secrets where name = 'supabase_service_role_key')
+         ),
+         body := '{}'::jsonb
+       );
+     $job$
+   );
+   ```
+
+The function tracks each channel separately, so a retry after one provider failure does not resend a channel that already succeeded. Confirm Twilio sender approval, template approval, Supabase function deployment, Vault secrets, and the cron job before relying on delivery.
 
 ## Run the app
 

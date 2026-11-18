@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { AppIcon } from '../components/AppIcon';
+import { BrandSymbol } from '../components/BrandSymbol';
 import { C, SERIF } from '../constants/theme';
 import { useApp } from '../context/AppContext';
 import { pickAvatar } from '../utils/pickAvatar';
@@ -61,7 +62,7 @@ export default function Settings() {
               {photo ? (
                 <Image source={{ uri: photo }} style={z.bigLogo} />
               ) : (
-                <View style={z.bigLogo}><AppIcon name="leaf" size={36} color="#fff" /></View>
+                <View style={z.bigLogo}><BrandSymbol size={48} reversed /></View>
               )}
               <View style={z.cameraBadge}><AppIcon name="camera" size={13} color="#fff" /></View>
             </View>

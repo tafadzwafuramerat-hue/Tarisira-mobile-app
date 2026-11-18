@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { AppIcon } from '../components/AppIcon';
+import { BrandSymbol } from '../components/BrandSymbol';
 import { C, SERIF } from '../constants/theme';
 
 const SPLASH_ORANGE = '#E8A04C';
@@ -30,7 +31,7 @@ export default function Splash() {
           {[300, 210, 130].map((d) => (
             <View key={d} style={[p.ring, { width: d * 2, height: d * 2, borderRadius: d }]} />
           ))}
-          <View style={p.logo}><AppIcon name="leaf" size={56} color="#fff" /></View>
+          <View style={p.logo}><BrandSymbol size={68} reversed /></View>
           <Text style={p.name}>TARISIRA</Text>
           <View style={p.underline} />
           <Text style={p.tag}>SELL MORE. OWE LESS. GROW.</Text>

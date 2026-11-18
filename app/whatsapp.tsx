@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text as NativeText, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text as NativeText, TextInput, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { AppIcon } from '../components/AppIcon';
+import { BrandSymbol } from '../components/BrandSymbol';
 import { C, SERIF, money } from '../constants/theme';
 import { Product, useApp } from '../context/AppContext';
 
@@ -46,19 +47,23 @@ function normalizeName(text: string): string {
 }
 
 export default function WhatsApp() {
-  const { lang, today, txs, debtors, debtTotal, products, lowCount, adjustStock, addDebtor, recordPayment } = useApp();
+  const { form, lang, today, txs, debtors, debtTotal, products, lowCount, adjustStock, addDebtor, recordPayment } = useApp();
   const insets = useSafeAreaInsets();
   const [input, setInput] = useState('');
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const conversationLanguage = useRef<'en' | 'sn'>(lang);
   const menu = lang === 'sn' ? MENU_SN : MENU_EN;
+  const firstName = form.name.trim().split(/\s+/)[0];
+  const welcome = lang === 'sn'
+    ? `Titambire zvakare${firstName ? `, ${firstName}` : ''}!`
+    : `Welcome back${firstName ? `, ${firstName}` : ''}!`;
   const [msgs, setMsgs] = useState<Msg[]>([
     {
       id: 1,
       from: 'bot',
       text: lang === 'sn'
-        ? `Titambire zvakare!\n\nMunoda kuita chii?\n\n${menu}`
-        : `Welcome back, Boss!\n\nWhat would you like to do?\n\n${menu}`,
+        ? `${welcome}\n\nMunoda kuita chii?\n\n${menu}`
+        : `${welcome}\n\nWhat would you like to do?\n\n${menu}`,
     },
   ]);
 
@@ -67,10 +72,10 @@ export default function WhatsApp() {
       if (current.length !== 1 || current[0].from !== 'bot') return current;
       conversationLanguage.current = lang;
       return [{ ...current[0], text: lang === 'sn'
-        ? `Titambire zvakare!\n\nMunoda kuita chii?\n\n${menu}`
-        : `Welcome back, Boss!\n\nWhat would you like to do?\n\n${menu}` }];
+        ? `${welcome}\n\nMunoda kuita chii?\n\n${menu}`
+        : `${welcome}\n\nWhat would you like to do?\n\n${menu}` }];
     });
-  }, [lang, menu]);
+  }, [lang, menu, welcome]);
 
   const reply = (q: string, replyLang: 'en' | 'sn'): string => {
     const t = normalizeText(q);
@@ -240,7 +245,7 @@ export default function WhatsApp() {
       <StatusBar style="light" />
       <View style={[w.bar, { paddingTop: insets.top + 10 }]}>
         <Pressable onPress={() => router.back()} hitSlop={12}><Text style={w.back}>‹</Text></Pressable>
-        <View style={w.avatar}><AppIcon name="leaf" size={20} color={C.dark} /></View>
+        <View style={w.avatar}><BrandSymbol size={30} /></View>
         <View>
           <Text style={w.title}>Tarisira</Text>
           <Text style={w.subtitle}>{lang === 'sn' ? 'Mubatsiri wemuno · Hapana internet' : 'Free assistant · Works offline'}</Text>

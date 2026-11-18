@@ -40,9 +40,15 @@ export default function Notifications() {
         <View style={[n.row, { paddingVertical: 18 }]}>
           <View style={{ flex: 1 }}>
             <Text style={n.title}>Push Notifications</Text>
-            <Text style={n.sub}>{granted === true ? 'Allowed' : granted === false ? 'Denied' : 'Not set'}</Text>
+            <Text style={n.sub}>
+              {granted === true
+                ? 'Allowed'
+                : granted === false
+                  ? 'Denied — enable in your phone settings'
+                  : 'Allow Tarisira to send you notifications'}
+            </Text>
           </View>
-          <Button label="Enable" style={{ paddingVertical: 10, paddingHorizontal: 14 }} onPress={enable} />
+          <Button label="Allow" style={{ paddingVertical: 10, paddingHorizontal: 14 }} onPress={enable} />
         </View>
         {ROWS.map((r, i) => (
           <View key={r.key} style={[n.row, i === ROWS.length - 1 && { borderBottomWidth: 0 }]}>

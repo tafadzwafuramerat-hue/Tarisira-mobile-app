@@ -3,6 +3,7 @@ import { Linking } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { Lang, STR, Strings } from '../constants/strings';
 import { supabase, supabaseConfigured, supabaseUrlString } from '../lib/supabase';
+import { harareDueDate } from '../utils/debtReminderSchedule';
 import { DEFAULT_PREFS, NotificationPrefs, saveNotificationPrefs, scheduleLocalNotification, savePushBusinessId } from '../utils/notifications';
 import { enqueue, getQueue, isOnline, startAutoSync, syncQueue } from '../utils/offlineQueue';
 
@@ -13,7 +14,11 @@ export type Product = {
 };
 
 export type PaymentEvent = { id: string | number; label: string; sub: string; amount: number; date: string };
-export type Debtor = { id: string | number; name: string; phone: string; amount: number; days: number; item?: string; history: PaymentEvent[] };
+export type Debtor = {
+  id: string | number; name: string; phone: string; amount: number; days: number; item?: string;
+  dueAt?: string; ownerApprovedReminders?: boolean; customerSmsOptIn?: boolean; customerWhatsappOptIn?: boolean;
+  history: PaymentEvent[];
+};
 
 export type Tx = { id: string | number; name: string; cat: string; qty: number; total: number; time: string; date: string; customer?: string; method: string };
 
@@ -71,7 +76,11 @@ type Ctx = {
   products: Product[]; addProduct: (p: { name: string; cat: string; price: number; qty: number }) => Promise<void>;
   adjustStock: (id: string | number, delta: number, label: string) => Promise<void>;
 
-  debtors: Debtor[]; addDebtor: (d: { name: string; amount: number; days: number; phone?: string; item?: string }) => Promise<void>;
+  debtors: Debtor[];
+  addDebtor: (d: {
+    name: string; amount: number; days: number; phone?: string; item?: string;
+    ownerApprovedReminders?: boolean; customerSmsOptIn?: boolean; customerWhatsappOptIn?: boolean;
+  }) => Promise<void>;
   markPaid: (id: string | number) => void; recordPayment: (id: string | number, amount: number) => Promise<void>;
 
   reminders: Reminder[]; addReminder: (r: Omit<Reminder, 'id' | 'createdLabel'>) => Promise<void>;
@@ -160,11 +169,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReminders([]);
       const nextBusinessId = membership?.business_id ?? null;
       setBusinessId(nextBusinessId);
+      const metadata = session.user.user_metadata ?? {};
+      const metadataName = typeof metadata.full_name === 'string' ? metadata.full_name : null;
+      if (metadataName !== null) {
+        setFormState((current) => ({ ...current, name: metadataName }));
+      }
       if (!nextBusinessId) {
-        const metadata = session.user.user_metadata ?? {};
         setFormState((current) => ({
           ...current,
-          name: typeof metadata.full_name === 'string' ? metadata.full_name : current.name,
           phone: typeof metadata.phone === 'string' ? metadata.phone : current.phone,
           password: '',
         }));
@@ -230,6 +242,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const payments = paymentResult.data ?? [];
       setDebtors((debtorResult.data ?? []).map((row) => ({
         id: row.id, name: row.name, phone: row.phone ?? '', amount: Number(row.current_balance), days: row.due_in_days,
+        dueAt: row.due_at ?? undefined,
+        ownerApprovedReminders: row.owner_approved_reminders ?? false,
+        customerSmsOptIn: row.customer_sms_opt_in ?? false,
+        customerWhatsappOptIn: row.customer_whatsapp_opt_in ?? false,
         history: payments.filter((payment) => payment.debtor_id === row.id).map((payment) => ({
           id: payment.id, label: 'Payment received', sub: payment.note ?? '', amount: -Number(payment.amount), date: new Date(payment.paid_at).toLocaleDateString('en', { day: '2-digit', month: 'short' }),
         })),
@@ -449,22 +465,46 @@ setTxs([]);
       addDebtor: async (debtor) => {
         requireBusiness();
         const client = supabase;
+        const dueAt = harareDueDate(debtor.days).toISOString();
+        const reminderConsent = {
+          due_at: dueAt,
+          owner_approved_reminders: debtor.ownerApprovedReminders ?? false,
+          customer_sms_opt_in: debtor.customerSmsOptIn ?? false,
+          customer_whatsapp_opt_in: debtor.customerWhatsappOptIn ?? false,
+        };
         const online = client ? await isOnline() : true;
         if (client && businessId && online) {
           const { data, error } = await client.from('debtors').insert({
             business_id: businessId, name: debtor.name, phone: debtor.phone || null,
             item_owed: debtor.item || null,
             opening_balance: debtor.amount, current_balance: debtor.amount, due_in_days: debtor.days,
+            ...reminderConsent,
           }).select('*').single();
           if (error) throw error;
-          setDebtors((list) => [...list, { id: data.id, name: data.name, phone: data.phone ?? '', item: data.item_owed ?? undefined, amount: Number(data.current_balance), days: data.due_in_days, history: [{ id: data.id, label: 'Debt recorded', sub: 'Initial amount', amount: Number(data.opening_balance), date: today() }] }]);
+          setDebtors((list) => [...list, {
+            id: data.id, name: data.name, phone: data.phone ?? '', item: data.item_owed ?? undefined,
+            amount: Number(data.current_balance), days: data.due_in_days, dueAt: data.due_at,
+            ownerApprovedReminders: data.owner_approved_reminders,
+            customerSmsOptIn: data.customer_sms_opt_in,
+            customerWhatsappOptIn: data.customer_whatsapp_opt_in,
+            history: [{ id: data.id, label: 'Debt recorded', sub: 'Initial amount', amount: Number(data.opening_balance), date: today() }],
+          }]);
           return;
         }
         if (client && businessId) {
-          await enqueue({ type: 'addDebtor', payload: { name: debtor.name, amount: debtor.amount, days: debtor.days, phone: debtor.phone, item: debtor.item } });
+          await enqueue({
+            type: 'addDebtor',
+            payload: {
+              name: debtor.name, amount: debtor.amount, days: debtor.days, phone: debtor.phone, item: debtor.item,
+              ...reminderConsent,
+            },
+          });
         }
         setDebtors((list) => [...list, {
           id: Date.now(), name: debtor.name, phone: debtor.phone || '+263 77 000 0000', item: debtor.item, amount: debtor.amount, days: debtor.days,
+          dueAt, ownerApprovedReminders: reminderConsent.owner_approved_reminders,
+          customerSmsOptIn: reminderConsent.customer_sms_opt_in,
+          customerWhatsappOptIn: reminderConsent.customer_whatsapp_opt_in,
           history: [{ id: Date.now(), label: 'Debt recorded', sub: 'Initial amount', amount: debtor.amount, date: today() }],
         }]);
       },

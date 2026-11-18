@@ -29,12 +29,12 @@ export default function Home() {
   const { form, today, txs, debtTotal, debtors, products, lowCount } = useApp();
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const name = form.name ? form.name.split(' ')[0] : 'Boss';
+  const name = form.name.trim().split(/\s+/)[0];
   const month = new Date().toLocaleString('en', { month: 'short', year: 'numeric' });
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16 }}>
-      <Text style={[s.h1, { fontSize: 26 }]}>{greet}, {name}</Text>
+      <Text style={[s.h1, { fontSize: 26 }]}>{name ? `${greet}, ${name}` : greet}</Text>
       <Text style={[s.muted, { marginTop: 4, marginBottom: 16, fontSize: 15 }]}>Here's your business overview</Text>
       <View style={h.grid}>
         <Stat icon="alert-outline" label="Low Stock" value={String(lowCount)} note={lowCount > 0 ? 'Needs attention' : 'All stocked'} color={lowCount > 0 ? DEEP_RED : undefined} attention={lowCount > 0} />

@@ -4,6 +4,7 @@
     "slug": "tarisira",
     "scheme": "tarisira",
     "version": "1.0.0",
+    "icon": "./assets/tarisira-app-icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": [
@@ -11,19 +12,36 @@
       "expo-sharing",
       "expo-secure-store",
       "expo-font",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/tarisira-app-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#005F3C"
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.tarisira.app",
       "infoPlist": {
+        "CFBundleDisplayName": "Tarisira",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.tarisira.app"
+      "package": "com.tarisira.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/tarisira-app-icon.png",
+        "backgroundColor": "#005F3C"
+      }
     },
-    "web": {},
+    "web": {
+      "favicon": "./assets/tarisira-app-icon.png"
+    },
     "extra": {
       "router": {},
       "eas": {

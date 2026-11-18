@@ -2,17 +2,16 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../../components/LocalizedText';
 import { router } from 'expo-router';
-import { CAT_COLORS, Donut } from '../../components/charts';
 import { AppIcon } from '../../components/AppIcon';
 import { Card, s } from '../../components/ui';
 import { C, SERIF, money } from '../../constants/theme';
 import { useApp } from '../../context/AppContext';
 
-const ROWS: [React.ComponentProps<typeof AppIcon>['name'], string, string, string][] = [
+const ROWS = [
   ['chart-box-outline', 'Sales Report', 'Revenue, products & trends', '/sales-report'],
   ['package-variant-closed', 'Stock Report', 'Levels, value & movement', '/stock-report'],
   ['account-group-outline', 'Debt Report', 'Outstanding & paid debts', '/debt-report'],
-];
+] as const;
 
 function Stat({ icon, label, value, color }: { icon: React.ComponentProps<typeof AppIcon>['name']; label: string; value: string; color?: string }) {
   return (
@@ -24,17 +23,25 @@ function Stat({ icon, label, value, color }: { icon: React.ComponentProps<typeof
 }
 
 export default function Reports() {
-  const { today, stockValue, debtTotal, products, cats } = useApp();
+  const { stockValue, debtTotal, products, txs } = useApp();
+  const now = new Date();
+  const monthlySales = txs.reduce((sum, sale) => {
+    const soldAt = new Date(sale.date);
+    return soldAt.getFullYear() === now.getFullYear() && soldAt.getMonth() === now.getMonth()
+      ? sum + sale.total
+      : sum;
+  }, 0);
+
   return (
     <ScrollView contentContainerStyle={{ padding: 16 }}>
       <View style={p.grid}>
-        <Stat icon="cash-multiple" label="Monthly Sales" value={money(today)} color={C.orange} />
+        <Stat icon="cash-multiple" label="Monthly Sales" value={money(monthlySales)} color={C.orange} />
         <Stat icon="package-variant-closed" label="Stock Value" value={money(Math.round(stockValue))} />
         <Stat icon="account-group-outline" label="Total Debt" value={money(debtTotal)} />
         <Stat icon="archive-outline" label="Products" value={String(products.length)} />
       </View>
       {ROWS.map(([icon, title, desc, path]) => (
-        <Pressable key={title} onPress={() => router.push(path as any)}>
+        <Pressable key={title} onPress={() => router.push(path)}>
           <Card style={[p.row, { marginTop: 12, marginBottom: 0 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
               <View style={p.iconBox}><AppIcon name={icon} size={22} color={C.dark} /></View>
@@ -44,23 +51,6 @@ export default function Reports() {
           </Card>
         </Pressable>
       ))}
-      <Card style={{ marginTop: 12 }}>
-        <Text style={p.rowTitle}>Sales by Category</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12 }}>
-          <Donut data={cats} />
-          <View style={{ flex: 1, gap: 10 }}>
-            {cats.map(([name, v], i) => (
-              <View key={name} style={p.row}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: CAT_COLORS[i % CAT_COLORS.length] }} />
-                  <Text style={{ color: C.ink }}>{name}</Text>
-                </View>
-                <Text style={{ fontWeight: '800', color: C.ink }}>{money(v)}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      </Card>
     </ScrollView>
   );
 }

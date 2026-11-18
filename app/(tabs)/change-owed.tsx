@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { LocalizedText as Text } from '../components/LocalizedText';
-import { ChangeOwedForm } from '../components/forms';
-import { AppIcon } from '../components/AppIcon';
-import { Badge, Card, Search, s } from '../components/ui';
-import { C, SERIF, money } from '../constants/theme';
-import { ChangeOwed, useApp } from '../context/AppContext';
-import { errorMessage } from '../utils/errors';
+import { LocalizedText as Text } from '../../components/LocalizedText';
+import { ChangeOwedForm } from '../../components/forms';
+import { AppIcon } from '../../components/AppIcon';
+import { Badge, Card, Search, s } from '../../components/ui';
+import { C, SERIF, money } from '../../constants/theme';
+import { ChangeOwed, useApp } from '../../context/AppContext';
+import { errorMessage } from '../../utils/errors';
 
 type CustomerBalance = {
   key: string;
@@ -88,7 +88,7 @@ export default function ChangeOwedPage() {
     <ScrollView contentContainerStyle={p.content} keyboardShouldPersistTaps="handled">
       <View style={p.hero}>
         <View style={p.heroIcon}><AppIcon name="cash-refund" size={24} color="#fff" /></View>
-        <Text style={p.heroLabel}>Total change the tuckshop owes</Text>
+        <Text style={p.heroLabel}>Total change the tuckshop owes customers</Text>
         <Text style={p.heroAmount}>{money(totalOwed)}</Text>
         <Text style={p.heroCount}>{customerCount} {customerCount === 1 ? 'person' : 'people'} waiting for change</Text>
       </View>

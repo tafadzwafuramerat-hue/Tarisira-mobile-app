@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Animated, Pressable, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -26,12 +26,18 @@ export default function Splash() {
     let alive = true;
     hasCompletedOnboarding().then((done) => {
       if (alive) setStatus(done ? 'splash' : 'onboarding');
+    }).catch((error: unknown) => {
+      if (alive) {
+        console.warn('Could not read onboarding completion:', error);
+        Alert.alert('Welcome to Tarisira', 'We could not load your saved onboarding status. You can continue and try again.');
+        setStatus('onboarding');
+      }
     });
     return () => { alive = false; };
   }, []);
 
-  const finishOnboarding = (then?: 'language') => {
-    void completeOnboarding();
+  const finishOnboarding = async (then?: 'language') => {
+    await completeOnboarding();
     if (then === 'language') {
       router.replace('/language');
     } else {

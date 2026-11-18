@@ -24,6 +24,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="stock" options={{ title: 'Stock', tabBarIcon: icon('package-variant-closed') }} />
       <Tabs.Screen name="sales" options={{ title: 'Sales', tabBarIcon: icon('cash-multiple') }} />
       <Tabs.Screen name="debtors" options={{ title: 'Debtors', tabBarIcon: icon('account-group-outline') }} />
+      <Tabs.Screen name="change-owed" options={{ title: 'Change', tabBarIcon: icon('cash-refund') }} />
       <Tabs.Screen name="reports" options={{ title: 'Reports', tabBarIcon: icon('chart-box-outline') }} />
     </Tabs>
   );

@@ -10,7 +10,7 @@ import { errorMessage } from '../utils/errors';
 
 export default function Signup() {
   const { t, form, setForm, backendConfigured, signUp } = useApp();
-  const ok = form.name && form.phone && form.password && form.agree;
+  const ok = form.name && form.email && form.password && form.agree;
   const [busy, setBusy] = React.useState(false);
   const continueSignup = async () => {
     if (!ok) return;
@@ -32,8 +32,8 @@ export default function Signup() {
     <Screen>
       <Header step={1} title={t.createTitle} sub={t.personal} />
       <Field label={t.fullName} placeholder={t.fullName} value={form.name} onChangeText={(v) => setForm({ name: v })} />
-      <Field label="Email (optional)" placeholder="name@example.com" keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={(v) => setForm({ email: v })} />
-      <Field label={t.phone} placeholder="+263 XX XXX XXXX" keyboardType="phone-pad" value={form.phone} onChangeText={(v) => setForm({ phone: v })} />
+      <Field label="Email" placeholder="name@example.com" keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={(v) => setForm({ email: v })} />
+      <Field label={`${t.phone} (optional)`} placeholder="+263 XX XXX XXXX" keyboardType="phone-pad" value={form.phone} onChangeText={(v) => setForm({ phone: v })} />
       <PasswordField label={t.password} placeholder={t.password} value={form.password} onChangeText={(v) => setForm({ password: v })} />
       <Pressable style={g.row} onPress={() => setForm({ agree: !form.agree })}>
         <Pressable style={[s.check, form.agree && { backgroundColor: C.green, borderColor: C.green }]} onPress={() => setForm({ agree: !form.agree })}>

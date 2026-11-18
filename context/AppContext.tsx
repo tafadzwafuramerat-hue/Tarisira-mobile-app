@@ -6,6 +6,7 @@ import { supabase, supabaseConfigured, supabaseUrlString } from '../lib/supabase
 import { harareDueDate } from '../utils/debtReminderSchedule';
 import { DEFAULT_PREFS, NotificationPrefs, saveNotificationPrefs, scheduleLocalNotification, savePushBusinessId } from '../utils/notifications';
 import { enqueue, getQueue, isOnline, startAutoSync, syncQueue } from '../utils/offlineQueue';
+import { createLocalUser, signInLocal, getLocalUser, signOutLocal, LocalUser } from '../utils/localAuth';
 
 export type StockEvent = { id: string | number; label: string; delta: number; date: string };
 export type Product = {
@@ -23,6 +24,8 @@ export type Debtor = {
 export type Tx = { id: string | number; name: string; cat: string; qty: number; total: number; time: string; date: string; customer?: string; method: string };
 
 export type Reminder = { id: string | number; debtorId: string | number; debtorName: string; amount: number; sendOn: 'Today' | 'Tomorrow' | 'Custom'; createdLabel: string };
+
+export type ChangeOwed = { id: string | number; customerName: string; phone: string; amount: number; settled: boolean; note: string; createdAt: string };
 
 export type Form = {
   name: string; phone: string; email: string; password: string; agree: boolean;
@@ -72,6 +75,7 @@ type Ctx = {
   signIn: (identifier: string, password: string) => Promise<boolean>;
   signUp: (details: { email: string; phone: string; password: string; name: string }) => Promise<void>;
   signOut: () => Promise<void>;
+  localUser: LocalUser | null;
 
   products: Product[]; addProduct: (p: { name: string; cat: string; price: number; qty: number }) => Promise<void>;
   adjustStock: (id: string | number, delta: number, label: string) => Promise<void>;
@@ -82,6 +86,8 @@ type Ctx = {
     ownerApprovedReminders?: boolean; customerSmsOptIn?: boolean; customerWhatsappOptIn?: boolean;
   }) => Promise<void>;
   markPaid: (id: string | number) => void; recordPayment: (id: string | number, amount: number) => Promise<void>;
+
+  changeOwed: ChangeOwed[]; addChangeOwed: (c: { customerName: string; phone?: string; amount: number; note?: string }) => Promise<void>; settleChangeOwed: (id: string | number) => Promise<void>;
 
   reminders: Reminder[]; addReminder: (r: Omit<Reminder, 'id' | 'createdLabel'>) => Promise<void>;
   recordSubscriptionPayment: (amount: number, provider: string, phone: string) => Promise<string | null>;
@@ -112,6 +118,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [photo, setPhoto] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<{ id: string; status: string }[]>([]);
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
+  const [localUser, setLocalUser] = useState<LocalUser | null>(null);
+  const [changeOwed, setChangeOwed] = useState<ChangeOwed[]>([]);
   const loadBusinessDataRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
@@ -129,6 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSession(nextSession);
       setAuthLoading(false);
     });
+    void getLocalUser().then((u) => { if (alive) setLocalUser(u); });
     return () => {
       alive = false;
       listener.subscription.unsubscribe();
@@ -213,7 +222,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let alive = true;
     const loadBusinessData = async () => {
       setAuthLoading(true);
-      const [productResult, movementResult, debtorResult, paymentResult, saleResult, saleItemResult, reminderResult, subscriptionResult] = await Promise.all([
+      const [productResult, movementResult, debtorResult, paymentResult, saleResult, saleItemResult, reminderResult, subscriptionResult, changeOwedResult] = await Promise.all([
         client.from('products').select('*').eq('business_id', businessId),
         client.from('stock_movements').select('*').eq('business_id', businessId).order('created_at', { ascending: false }),
         client.from('debtors').select('*').eq('business_id', businessId),
@@ -222,9 +231,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         client.from('sale_items').select('*').eq('business_id', businessId),
         client.from('reminders').select('*, debtors(name,current_balance)').eq('business_id', businessId).order('scheduled_for', { ascending: true }),
         client.from('subscriptions').select('id,status').eq('business_id', businessId),
+        client.from('change_owed').select('*').eq('business_id', businessId).order('created_at', { ascending: false }),
       ]);
       if (!alive) return;
-      const errors = [productResult.error, movementResult.error, debtorResult.error, paymentResult.error, saleResult.error, saleItemResult.error, reminderResult.error, subscriptionResult.error].filter(Boolean);
+      const errors = [productResult.error, movementResult.error, debtorResult.error, paymentResult.error, saleResult.error, saleItemResult.error, reminderResult.error, subscriptionResult.error, changeOwedResult.error].filter(Boolean);
       if (errors.length) {
         console.warn('Could not load normalized business data:', errors.map((error) => error?.message).join('; '));
         setAuthLoading(false);
@@ -260,6 +270,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: row.id, debtorId: row.debtor_id, debtorName: row.debtors?.name ?? '', amount: Number(row.debtors?.current_balance ?? 0),
         sendOn: new Date(row.scheduled_for).toDateString() === new Date().toDateString() ? 'Today' : 'Tomorrow',
         createdLabel: new Date(row.created_at).toLocaleDateString('en', { day: '2-digit', month: 'short' }),
+      })));
+      setChangeOwed((changeOwedResult.data ?? []).map((row) => ({
+        id: row.id, customerName: row.customer_name, phone: row.phone ?? '', amount: Number(row.amount),
+        settled: row.settled ?? false, note: row.note ?? '', createdAt: row.created_at,
       })));
       setAuthLoading(false);
     };
@@ -306,6 +320,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (identifier: string, password: string) => {
     if (!supabase) throw new Error('Supabase is not configured. Add the project URL and publishable key to your .env file.');
+    const online = await isOnline();
+    if (!online) {
+      const result = await signInLocal(identifier, password);
+      if (!result) throw new Error('No network and no local account found. Create an account first while online, or sign up now for offline use.');
+      const u = await getLocalUser();
+      setLocalUser(u);
+      return result.hasBusiness;
+    }
     const credential = identifier.trim();
     const result = credential.includes('@')
       ? await supabase.auth.signInWithPassword({ email: credential, password })
@@ -322,9 +344,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!supabase) throw new Error('Supabase is not configured. Add the project URL and publishable key to your .env file.');
     const cleanEmail = email.trim();
     const cleanPhone = phone.trim();
-    const result = cleanEmail
-      ? await supabase.auth.signUp({ email: cleanEmail, password, options: { data: { full_name: name, phone: cleanPhone } } })
-      : await supabase.auth.signUp({ phone: cleanPhone, password, options: { data: { full_name: name } } });
+    const online = await isOnline();
+    if (!online) {
+      const user = await createLocalUser({ name, email: cleanEmail, phone: cleanPhone, password });
+      setLocalUser(user);
+      await enqueue({ type: 'createAccount', payload: { name, email: cleanEmail, phone: cleanPhone, password, localId: user.id } });
+      return;
+    }
+    if (!cleanEmail) throw new Error('Email is required to create your account.');
+    const result = await supabase.auth.signUp({
+      email: cleanEmail,
+      password,
+      options: { data: { full_name: name, phone: cleanPhone } },
+    });
     if (result.error) throw result.error;
     if (result.data.user && !result.data.session) {
       throw new Error('Account created. Verify your email or phone, then sign in to continue setup.');
@@ -338,18 +370,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [form, lang]);
 
   const signOut = useCallback(async () => {
-    if (!supabase) return;
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    if (supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    }
+    await signOutLocal();
     setFormState({ name: '', phone: '', email: '', password: '', agree: false, bizName: '', bizType: 'Tuckshop', location: '', bizPhone: '', size: '1', currencies: ['USD'] });
     setBusinessId(null);
     setProducts(supabaseConfigured ? [] : START_PRODUCTS);
     setDebtors(supabaseConfigured ? [] : START_DEBTORS);
-setTxs([]);
-      setReminders([]);
-      setSubscriptions([]);
-      setPhoto(null);
+    setTxs([]);
+    setReminders([]);
+    setSubscriptions([]);
+    setPhoto(null);
     setLoadedUserId(null);
+    setLocalUser(null);
   }, []);
 
   const appState = useMemo(() => ({ lang, photo }), [lang, photo]);
@@ -391,10 +426,10 @@ setTxs([]);
     txs.forEach((x) => { cats[x.cat] = (cats[x.cat] || 0) + x.total; });
 
     const requireBusiness = () => {
-      if (supabaseConfigured && !session) {
+      if (supabaseConfigured && !session && !localUser) {
         throw new Error('Sign in before adding business data.');
       }
-      if (supabaseConfigured && !businessId) {
+      if (supabaseConfigured && !businessId && !localUser) {
         throw new Error('Finish business setup before adding business data.');
       }
     };
@@ -402,6 +437,7 @@ setTxs([]);
     return {
       lang, setLang, t: STR[lang],
       session, authLoading, backendConfigured: supabaseConfigured, businessId, createBusiness, signIn, signUp, signOut,
+      localUser,
       form, setForm: (patch) => setFormState((current) => ({ ...current, ...patch })),
       photo, setPhoto,
 
@@ -535,6 +571,32 @@ setTxs([]);
           : item).filter((item) => item.amount > 0));
       },
 
+      changeOwed,
+      addChangeOwed: async (c) => {
+        requireBusiness();
+        const client = supabase;
+        const online = client ? await isOnline() : true;
+        if (client && businessId && online) {
+          const { data, error } = await client.rpc('add_change_owed', {
+            target_business_id: businessId, customer_name: c.customerName, phone: c.phone || null, amount: c.amount, note: c.note || null,
+          });
+          if (error) throw error;
+          setChangeOwed((list) => [{ id: data as string, customerName: c.customerName, phone: c.phone || '', amount: c.amount, settled: false, note: c.note || '', createdAt: new Date().toISOString() }, ...list]);
+          return;
+        }
+        setChangeOwed((list) => [{ id: Date.now(), customerName: c.customerName, phone: c.phone || '', amount: c.amount, settled: false, note: c.note || '', createdAt: new Date().toISOString() }, ...list]);
+      },
+      settleChangeOwed: async (id) => {
+        requireBusiness();
+        const client = supabase;
+        const online = client ? await isOnline() : true;
+        if (client && businessId && typeof id === 'string' && online) {
+          const { error } = await client.rpc('settle_change_owed', { target_business_id: businessId, target_change_id: id });
+          if (error) throw error;
+        }
+        setChangeOwed((list) => list.map((item) => String(item.id) === String(id) ? { ...item, settled: true } : item));
+      },
+
       reminders,
       addReminder: async (reminder) => {
         requireBusiness();
@@ -642,7 +704,7 @@ setTxs([]);
         void saveNotificationPrefs(p);
       },
     };
-  }, [lang, form, products, debtors, txs, reminders, session, authLoading, businessId, createBusiness, signIn, signUp, signOut, photo, subscriptions, notificationPrefs]);
+  }, [lang, form, products, debtors, txs, reminders, session, authLoading, businessId, createBusiness, signIn, signUp, signOut, photo, subscriptions, notificationPrefs, localUser, changeOwed]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

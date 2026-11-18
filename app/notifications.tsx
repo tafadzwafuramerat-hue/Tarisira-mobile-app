@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { Alert, StyleSheet, Switch, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, AppState, Linking, StyleSheet, Switch, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { router } from 'expo-router';
 import { Button, Header, Screen } from '../components/ui';
 import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
-import { DEFAULT_PREFS, NotificationPrefs, registerForPushNotificationsAsync } from '../utils/notifications';
+import * as Notifications from 'expo-notifications';
+import { registerForPushNotificationsAsync } from '../utils/notifications';
+import { errorMessage } from '../utils/errors';
 
 type Key = 'sales' | 'lowStock' | 'payments' | 'daily' | 'weekly' | 'marketing';
 const ROWS: { key: Key; title: string; sub: string }[] = [
@@ -17,19 +19,71 @@ const ROWS: { key: Key; title: string; sub: string }[] = [
   { key: 'marketing', title: 'Marketing Updates', sub: 'Tips and product updates' },
 ];
 
-export default function Notifications() {
+export default function NotificationsScreen() {
   const { notificationPrefs, setNotificationPrefs } = useApp();
   const [granted, setGranted] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
   const toggle = (k: Key) => setNotificationPrefs({ ...notificationPrefs, [k]: !notificationPrefs[k] });
 
+  useEffect(() => {
+    let active = true;
+    const refreshPermission = async () => {
+      try {
+        const { granted: permissionGranted } = await Notifications.getPermissionsAsync();
+        if (active) setGranted(permissionGranted);
+      } catch (error) {
+        if (active) Alert.alert('Could not check notification permission', errorMessage(error, 'Please try again.'));
+      }
+    };
+    void refreshPermission();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshPermission();
+    });
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
   const enable = async () => {
-    const status = await registerForPushNotificationsAsync();
-    if (status === 'granted') {
-      setGranted(true);
-      Alert.alert('Enabled', 'You will receive low stock and sales notifications.');
-    } else {
-      setGranted(false);
-      Alert.alert('Permission denied', 'Enable notifications in your phone settings to get low stock alerts.');
+    setBusy(true);
+    try {
+      const currentPermission = await Notifications.getPermissionsAsync();
+      if (currentPermission.granted) {
+        setGranted(true);
+        Alert.alert('Already allowed', 'Tarisira is allowed to send you notifications.');
+        return;
+      }
+
+      if (granted === false || !currentPermission.canAskAgain) {
+        setGranted(false);
+        Alert.alert(
+          'Notifications are turned off',
+          'Allow notifications for Tarisira in your phone settings.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+          ],
+        );
+        return;
+      }
+
+      const status = await registerForPushNotificationsAsync();
+      const isGranted = status === 'granted';
+      setGranted(isGranted);
+      if (isGranted) {
+        Alert.alert('Enabled', 'You will receive Tarisira notifications.');
+      } else {
+        Alert.alert(
+          'Notifications not allowed',
+          'Allow notifications for Tarisira in your phone settings.',
+          [{ text: 'Open Settings', onPress: () => void Linking.openSettings() }],
+        );
+      }
+    } catch (error) {
+      Alert.alert('Could not enable notifications', errorMessage(error, 'Please try again.'));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -48,7 +102,12 @@ export default function Notifications() {
                   : 'Allow Tarisira to send you notifications'}
             </Text>
           </View>
-          <Button label="Allow" style={{ paddingVertical: 10, paddingHorizontal: 14 }} onPress={enable} />
+          <Button
+            label={busy ? 'Please wait…' : granted === false ? 'Open Settings' : 'Allow'}
+            disabled={busy}
+            style={{ paddingVertical: 10, paddingHorizontal: 14 }}
+            onPress={enable}
+          />
         </View>
         {ROWS.map((r, i) => (
           <View key={r.key} style={[n.row, i === ROWS.length - 1 && { borderBottomWidth: 0 }]}>

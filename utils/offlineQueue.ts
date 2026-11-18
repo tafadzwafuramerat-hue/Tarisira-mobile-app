@@ -6,6 +6,7 @@ import { harareDueDate } from './debtReminderSchedule';
 const QUEUE_KEY = 'tarisira_offline_queue_v1';
 
 export type OfflineAction =
+  | { type: 'createAccount'; payload: { name: string; email: string; phone: string; password: string; localId: string } }
   | { type: 'recordSale'; payload: { productId: string; qty: number; customer: string; method: string; price: number; name: string; cat: string } }
   | { type: 'adjustStock'; payload: { productId: string; delta: number; label: string } }
   | {
@@ -78,7 +79,26 @@ export async function syncQueue(businessId: string): Promise<{ synced: number; f
   let failed = 0;
   for (const entry of queue) {
     try {
-      if (entry.action.type === 'recordSale') {
+      if (entry.action.type === 'createAccount') {
+        const p = entry.action.payload;
+        const cleanEmail = p.email.trim();
+        const cleanPhone = p.phone.trim();
+        if (!cleanEmail) throw new Error('Email is required to create an account.');
+        const result = await supabase!.auth.signUp({
+          email: cleanEmail,
+          password: p.password,
+          options: { data: { full_name: p.name, phone: cleanPhone } },
+        });
+        if (result.error) {
+          const msg = result.error.message;
+          if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
+            const signInResult = await supabase!.auth.signInWithPassword({ email: cleanEmail, password: p.password });
+            if (signInResult.error) throw signInResult.error;
+          } else {
+            throw result.error;
+          }
+        }
+      } else if (entry.action.type === 'recordSale') {
         const p = entry.action.payload;
         const { error } = await supabase!.rpc('record_business_sale', {
           target_business_id: businessId, target_product_id: p.productId, sold_quantity: p.qty, customer: p.customer, method: p.method,

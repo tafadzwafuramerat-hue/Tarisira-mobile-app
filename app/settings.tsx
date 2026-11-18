@@ -23,6 +23,7 @@ export default function Settings() {
       { icon: 'domain', label: 'Business Profile', onPress: () => router.push('/business-profile') },
       { icon: 'web', label: 'Language', right: lang === 'en' ? 'English' : 'Shona', onPress: () => router.push('/language-settings') },
       { icon: 'bell-outline', label: 'Notifications', onPress: () => router.push('/notifications') },
+      { icon: 'cash-refund', label: 'Change Owed', onPress: () => router.push('/change-owed') },
       { icon: 'star-outline', label: 'Subscription', onPress: () => router.push('/subscription') },
     ],
     [

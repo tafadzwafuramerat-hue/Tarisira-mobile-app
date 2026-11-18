@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,7 +6,9 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { AppIcon } from '../components/AppIcon';
 import { BrandSymbol } from '../components/BrandSymbol';
+import { Onboarding } from '../components/Onboarding';
 import { C, SERIF } from '../constants/theme';
+import { hasCompletedOnboarding, completeOnboarding } from '../utils/onboarding';
 
 const SPLASH_ORANGE = '#E8A04C';
 
@@ -18,6 +20,41 @@ const CHIPS: { icon: React.ComponentProps<typeof AppIcon>['name']; label: string
 ];
 
 export default function Splash() {
+  const [status, setStatus] = useState<'loading' | 'onboarding' | 'splash'>('loading');
+
+  useEffect(() => {
+    let alive = true;
+    hasCompletedOnboarding().then((done) => {
+      if (alive) setStatus(done ? 'splash' : 'onboarding');
+    });
+    return () => { alive = false; };
+  }, []);
+
+  const finishOnboarding = (then?: 'language') => {
+    void completeOnboarding();
+    if (then === 'language') {
+      router.replace('/language');
+    } else {
+      setStatus('splash');
+    }
+  };
+
+  if (status === 'loading') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#005F3C' }}>
+        <StatusBar style="light" />
+      </View>
+    );
+  }
+
+  if (status === 'onboarding') {
+    return <Onboarding onSkip={() => finishOnboarding()} onGetStarted={() => finishOnboarding('language')} />;
+  }
+
+  return <SplashContent />;
+}
+
+function SplashContent() {
   const fade = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fade, { toValue: 1, duration: 900, useNativeDriver: true }).start();

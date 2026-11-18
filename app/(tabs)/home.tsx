@@ -54,6 +54,12 @@ export default function Home() {
         <Pressable style={[h.action, h.small]} onPress={() => router.push('/reminders')}><View style={h.actionContent}><AppIcon name="bell-outline" size={18} color={C.dark} /><Text style={h.actionText}>Reminders</Text></View></Pressable>
         <Pressable style={[h.action, h.small]} onPress={() => router.navigate('/reports')}><View style={h.actionContent}><AppIcon name="chart-box-outline" size={18} color={C.dark} /><Text style={h.actionText}>Reports</Text></View></Pressable>
       </View>
+      <Pressable style={[h.action, h.small, { marginTop: 14 }]} onPress={() => router.push('/change-owed')}>
+        <View style={h.actionContent}>
+          <AppIcon name="cash-refund" size={18} color={C.dark} />
+          <Text style={h.actionText}>Change Owed</Text>
+        </View>
+      </Pressable>
     </ScrollView>
   );
 }

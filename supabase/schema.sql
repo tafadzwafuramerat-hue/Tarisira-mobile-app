@@ -401,6 +401,72 @@ grant execute on function public.record_business_sale(uuid, uuid, integer, text,
 grant execute on function public.record_debtor_payment(uuid, uuid, numeric, text, text) to authenticated;
 grant execute on function public.adjust_business_stock(uuid, uuid, integer, text) to authenticated;
 
+-- Change owed: the shop owes a customer money because it could not give change.
+create table if not exists public.change_owed (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  customer_name text not null check (length(trim(customer_name)) > 0),
+  phone text,
+  amount numeric(12,2) not null default 0 check (amount >= 0),
+  settled boolean not null default false,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists change_owed_business_idx on public.change_owed(business_id, settled);
+
+create or replace function public.add_change_owed(
+  target_business_id uuid,
+  customer_name text,
+  phone text default null,
+  amount numeric default 0,
+  note text default null
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  new_id uuid;
+begin
+  if auth.uid() is null or not public.is_business_member(target_business_id) then
+    raise exception 'You do not have access to this business';
+  end if;
+  if amount <= 0 then raise exception 'Amount must be greater than zero'; end if;
+
+  insert into public.change_owed (business_id, customer_name, phone, amount, note)
+  values (target_business_id, customer_name, phone, amount, note)
+  returning id into new_id;
+  return new_id;
+end;
+$$;
+
+create or replace function public.settle_change_owed(
+  target_business_id uuid,
+  target_change_id uuid
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null or not public.is_business_member(target_business_id) then
+    raise exception 'You do not have access to this business';
+  end if;
+  update public.change_owed set settled = true, updated_at = now()
+  where id = target_change_id and business_id = target_business_id;
+  if not found then raise exception 'Change record not found'; end if;
+end;
+$$;
+
+revoke all on function public.add_change_owed(uuid, text, text, numeric, text) from public, anon;
+revoke all on function public.settle_change_owed(uuid, uuid) from public, anon;
+grant execute on function public.add_change_owed(uuid, text, text, numeric, text) to authenticated;
+grant execute on function public.settle_change_owed(uuid, uuid) to authenticated;
+
 -- Indexes support tenant-filtered reads and reporting queries.
 create index if not exists business_members_user_idx on public.business_members(user_id, business_id);
 create index if not exists products_business_name_idx on public.products(business_id, name);
@@ -423,6 +489,7 @@ alter table public.debtors enable row level security;
 alter table public.debtor_payments enable row level security;
 alter table public.reminders enable row level security;
 alter table public.automatic_debt_reminders enable row level security;
+alter table public.change_owed enable row level security;
 
 -- Policies are dropped first so this script can be run more than once.
 drop policy if exists businesses_select_member on public.businesses;
@@ -460,6 +527,10 @@ drop policy if exists reminders_select_member on public.reminders;
 drop policy if exists reminders_insert_member on public.reminders;
 drop policy if exists reminders_update_member on public.reminders;
 drop policy if exists reminders_delete_admin on public.reminders;
+drop policy if exists change_owed_select_member on public.change_owed;
+drop policy if exists change_owed_insert_member on public.change_owed;
+drop policy if exists change_owed_update_member on public.change_owed;
+drop policy if exists change_owed_delete_admin on public.change_owed;
 
 -- Businesses and membership: the create_business RPC creates initial owner membership.
 create policy businesses_select_member on public.businesses
@@ -548,13 +619,22 @@ create policy reminders_update_member on public.reminders for update to authenti
 create policy reminders_delete_admin on public.reminders for delete to authenticated
   using (public.has_business_role(business_id, array['owner','admin']));
 
+create policy change_owed_select_member on public.change_owed for select to authenticated
+  using (public.is_business_member(business_id));
+create policy change_owed_insert_member on public.change_owed for insert to authenticated
+  with check (public.is_business_member(business_id));
+create policy change_owed_update_member on public.change_owed for update to authenticated
+  using (public.is_business_member(business_id)) with check (public.is_business_member(business_id));
+create policy change_owed_delete_admin on public.change_owed for delete to authenticated
+  using (public.has_business_role(business_id, array['owner','admin']));
+
 -- Keep access explicit. RLS still decides which rows are visible/mutable.
 revoke all on public.businesses, public.business_members, public.products, public.stock_movements, public.sales,
-  public.sale_items, public.debtors, public.debtor_payments, public.reminders, public.automatic_debt_reminders from anon, authenticated;
+  public.sale_items, public.debtors, public.debtor_payments, public.reminders, public.automatic_debt_reminders, public.change_owed from anon, authenticated;
 grant select, update, delete on public.businesses to authenticated;
 grant select, insert, update, delete on public.business_members,
   public.products, public.stock_movements, public.sales, public.sale_items, public.debtors,
-  public.debtor_payments, public.reminders to authenticated;
+  public.debtor_payments, public.reminders, public.change_owed to authenticated;
 grant select, insert, update on public.automatic_debt_reminders to service_role;
 
 -- Preserve compatibility with the currently wired initial app-state persistence.
@@ -678,6 +758,32 @@ drop policy if exists "avatars: owner delete" on storage.objects;
 create policy "avatars: owner delete" on storage.objects
   for delete to authenticated
   using (bucket_id = 'avatars' and name like auth.uid()::text || '/%');
+
+create table if not exists public.phone_password_reset_tokens (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  token_hash text not null unique,
+  expires_at timestamptz not null,
+  requested_at timestamptz not null default now(),
+  consumed_at timestamptz
+);
+alter table public.phone_password_reset_tokens enable row level security;
+revoke all on public.phone_password_reset_tokens from public, anon, authenticated;
+grant all on public.phone_password_reset_tokens to service_role;
+
+create or replace function public.find_verified_auth_user_id_by_phone(phone_to_find text)
+returns uuid
+language sql
+security definer
+set search_path = ''
+as $$
+  select id
+  from auth.users
+  where phone = phone_to_find
+    and phone_confirmed_at is not null
+  limit 1
+$$;
+revoke all on function public.find_verified_auth_user_id_by_phone(text) from public, anon, authenticated;
+grant execute on function public.find_verified_auth_user_id_by_phone(text) to service_role;
 
 notify pgrst, 'reload schema';
 

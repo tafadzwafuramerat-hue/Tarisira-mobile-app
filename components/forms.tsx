@@ -129,6 +129,46 @@ export function DebtorForm({ onClose }: { onClose: () => void }) {
   );
 }
 
+export function ChangeOwedForm({ onClose }: { onClose: () => void }) {
+  const { addChangeOwed } = useApp();
+  const [v, setV] = useState({ customerName: '', phone: '', amount: '', note: '' });
+  const [busy, setBusy] = useState(false);
+  const set = (key: keyof typeof v) => (value: string) => setV((current) => ({ ...current, [key]: value }));
+
+  const save = async () => {
+    const amount = Number.parseFloat(v.amount);
+    if (!v.customerName.trim() || !Number.isFinite(amount) || amount <= 0) {
+      Alert.alert('Missing details', 'Enter the customer’s name and a change amount greater than zero.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await addChangeOwed({
+        customerName: v.customerName.trim(),
+        phone: v.phone.trim(),
+        amount,
+        note: v.note.trim(),
+      });
+      onClose();
+    } catch (error) {
+      Alert.alert('Change could not be saved', errorMessage(error, 'Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet title="Record Change Owed" onClose={onClose}>
+      <Field label="Customer name" value={v.customerName} onChangeText={set('customerName')} placeholder="Who left their change?" />
+      <Field label="Phone number (optional)" keyboardType="phone-pad" value={v.phone} onChangeText={set('phone')} placeholder="e.g. +263 77 123 4567" />
+      <Field label="Change owed ($)" keyboardType="decimal-pad" value={v.amount} onChangeText={set('amount')} placeholder="0.00" />
+      <Field label="Note (optional)" value={v.note} onChangeText={set('note')} placeholder="What was the change from?" />
+      <Button label={busy ? 'Saving…' : 'Save Change Owed'} disabled={busy} onPress={() => void save()} />
+    </Sheet>
+  );
+}
+
 const f = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: { backgroundColor: C.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' },

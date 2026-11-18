@@ -6,7 +6,7 @@ The app uses Supabase Auth and normalized business tables protected by row-level
 
 1. Create a Supabase project.
 2. In **SQL Editor**, run [`supabase/schema.sql`](supabase/schema.sql). This creates the business, product, sales, debtor, debtor payment, reminder, and supporting tables, then enables RLS policies that limit rows to members of the matching business. It also retains `public.app_state` for compatibility with existing user data.
-3. In Supabase **Authentication → Sign In / Providers**, enable Phone and/or Email according to the signup methods you will support. For phone sign-in and password recovery, configure an SMS provider and an SMS OTP template containing `{{ .Code }}`. Phone recovery sends a code only to an existing account's phone number; enter it in international format (for example, `+263771234567`).
+3. In Supabase **Authentication → Sign In / Providers**, enable Phone and/or Email according to the signup methods you will support. Phone password recovery uses a Tarisira SMS reset link sent through Twilio; it works for verified phone numbers registered directly with Supabase Auth.
 4. Copy `.env.example` to `.env` and fill in the Supabase project URL and publishable/anon key from **Project Settings → API**. These are public client credentials protected by RLS; never put the service-role key in the app.
 5. Restart Expo after changing environment variables (`npx expo start -c`).
 
@@ -16,11 +16,28 @@ Email password-reset links are sent by Supabase Auth. In the Supabase Dashboard,
 
 To make the sender show as **Tarisira** in the recipient’s inbox, configure a custom SMTP provider under **Project Settings → Authentication → SMTP Settings** (or **Authentication → SMTP Settings**, depending on the Dashboard layout) and set its sender name to `Tarisira`. The email template controls the message contents; the SMTP sender configuration controls the sender display name. Changing app code alone cannot change either setting for the hosted Supabase project.
 
+### Phone password-reset links
+
+For an existing project, run [`supabase/phone-password-reset-setup.sql`](supabase/phone-password-reset-setup.sql) in the Supabase SQL Editor. New projects get the table and lookup function from `supabase/schema.sql`.
+
+Configure Twilio SMS secrets, then deploy the public recovery Edge Function (its reset-token handling and password changes run server-side; never expose the service-role key to the app):
+
+```sh
+supabase secrets set TWILIO_ACCOUNT_SID=AC... TWILIO_AUTH_TOKEN=... TWILIO_SMS_FROM=+263...
+supabase functions deploy reset-password-phone
+```
+
+Use `TWILIO_MESSAGING_SERVICE_SID=MG...` instead of `TWILIO_SMS_FROM` when using a Messaging Service. Supabase supplies `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to the function. Reset links are random, single-use, expire after 15 minutes, and are limited to one SMS per account per minute. A phone number must be verified on the Supabase Auth account; a phone stored only as unverified profile metadata cannot be used to reset that account. The deep link opens the installed Tarisira app, so test this flow on an installed native build rather than Expo Go.
+
 Without Supabase variables the app intentionally stays in demo mode. With Supabase configured, sign-up and sign-in use Supabase Auth, the session is persisted with Expo SecureStore on native platforms, and each user’s current business state is saved to their own RLS-protected row.
 
 ### Backend scope
 
 Business data is stored in tenant-scoped relational tables. Database functions perform coupled operations such as recording a sale while decrementing stock and recording debtor payments. Configure email/phone verification, password recovery, backups, and production RLS testing before onboarding real customers.
+
+### Change owed
+
+The Change Owed page tracks change the tuckshop owes customers, grouped by customer, with outstanding totals and a way to mark amounts as repaid. On an existing Supabase project, run [`supabase/change-owed-setup.sql`](supabase/change-owed-setup.sql) in the SQL Editor. New projects get the table, access policies, and database functions from `supabase/schema.sql`.
 
 ### Automatic debt reminders
 

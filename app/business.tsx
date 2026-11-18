@@ -10,7 +10,7 @@ import { errorMessage } from '../utils/errors';
 const TYPES = ['Tuckshop', 'Clothing store', 'Salon', 'Restaurant', 'Hardware', 'Other'];
 
 export default function Business() {
-  const { t, form, setForm, session, backendConfigured, createBusiness } = useApp();
+  const { t, form, setForm, session, backendConfigured, createBusiness, localUser } = useApp();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const continueSetup = async () => {

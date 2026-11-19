@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleProp, StyleSheet, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleProp, StyleSheet, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { AppIcon } from './AppIcon';
@@ -10,13 +10,31 @@ import { C, SERIF } from '../constants/theme';
 import { useApp } from '../context/AppContext';
 
 export function Screen({ children }: { children: ReactNode }) {
+  const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
       <StatusBar style="dark" />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 16 }}>
-        {children}
-      </ScrollView>
-    </SafeAreaView>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+      >
+        <ScrollView
+          ref={(ref) => { (globalThis as any).__tarisiraScrollRef = ref; }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          nestedScrollEnabled={false}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingHorizontal: 20,
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 20,
+          }}
+        >
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -31,30 +49,30 @@ export function Button({ label, onPress, disabled, outline, style }: {
   );
 }
 
-export function Field({ label, ...props }: { label: string } & TextInputProps) {
+export const Field = React.forwardRef<any, { label: string } & TextInputProps>(({ label, ...props }, ref) => {
   const { lang } = useApp();
   return (
     <View style={{ marginBottom: 16 }}>
       <Text style={s.label}>{label}</Text>
-      <TextInput placeholderTextColor="#8FA79B" style={s.input} {...props} placeholder={lang === 'sn' && props.placeholder ? shonaText(props.placeholder) : props.placeholder} />
+      <TextInput ref={ref} placeholderTextColor="#8FA79B" style={s.input} {...props} placeholder={lang === 'sn' && props.placeholder ? shonaText(props.placeholder) : props.placeholder} />
     </View>
   );
-}
+});
 
-export function PasswordField({ label, value, onChangeText, placeholder }: { label: string; value: string; onChangeText: (v: string) => void; placeholder?: string }) {
+export const PasswordField = React.forwardRef<any, { label: string; value: string; onChangeText: (v: string) => void; placeholder?: string }>(({ label, value, onChangeText, placeholder }, ref) => {
   const [show, setShow] = React.useState(false);
   return (
     <View style={{ marginBottom: 16 }}>
       <Text style={s.label}>{label}</Text>
       <View style={{ position: 'relative' }}>
-        <TextInput style={[s.input, { paddingRight: 44 }]} placeholder={placeholder} placeholderTextColor="#8FA79B" secureTextEntry={!show} value={value} onChangeText={onChangeText} />
+        <TextInput ref={ref} style={[s.input, { paddingRight: 44 }]} placeholder={placeholder} placeholderTextColor="#8FA79B" secureTextEntry={!show} value={value} onChangeText={onChangeText} />
         <Pressable onPress={() => setShow(!show)} style={s.eyeWrap} hitSlop={8}>
           <AppIcon name={show ? 'eye-off' : 'eye'} size={22} color={C.muted} />
         </Pressable>
       </View>
     </View>
   );
-}
+});
 
 export function Header({ title, sub, step }: { title: string; sub: string; step?: number }) {
   const { t } = useApp();

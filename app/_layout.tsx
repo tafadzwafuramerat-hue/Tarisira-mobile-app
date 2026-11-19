@@ -6,7 +6,9 @@ import { C } from '../constants/theme';
 export default function RootLayout() {
   return (
     <AppProvider>
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: C.bg } }} />
+      <Stack
+        screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: C.bg } }}
+      />
     </AppProvider>
   );
 }

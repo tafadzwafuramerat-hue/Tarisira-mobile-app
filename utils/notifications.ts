@@ -30,13 +30,19 @@ type AppStateRow = {
   updated_at: string;
 };
 
-if (Platform.OS === 'android') {
-  void Notifications.setNotificationChannelAsync('default', {
-    name: 'default',
-    importance: Notifications.AndroidImportance.HIGH,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#00A86B',
-  });
+async function configureAndroidNotificationChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+
+  try {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'Tarisira notifications',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#00A86B',
+    });
+  } catch (error) {
+    console.warn('Could not configure the Android notification channel:', error);
+  }
 }
 
 // app_state stores one row per user with a JSON blob. Every write must merge
@@ -63,6 +69,7 @@ async function writeState(userId: string, patch: Record<string, unknown>): Promi
 
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
+  await configureAndroidNotificationChannel();
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
   if (existingStatus !== 'granted') {

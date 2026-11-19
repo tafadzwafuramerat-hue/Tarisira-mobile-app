@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -7,8 +7,8 @@ import { router } from 'expo-router';
 import { AppIcon } from '../components/AppIcon';
 import { BrandSymbol } from '../components/BrandSymbol';
 import { Onboarding } from '../components/Onboarding';
-import { C, SERIF } from '../constants/theme';
-import { hasCompletedOnboarding, completeOnboarding } from '../utils/onboarding';
+import { SERIF } from '../constants/theme';
+import { completeOnboarding } from '../utils/onboarding';
 
 const SPLASH_ORANGE = '#E8A04C';
 
@@ -20,51 +20,29 @@ const CHIPS: { icon: React.ComponentProps<typeof AppIcon>['name']; label: string
 ];
 
 export default function Splash() {
-  const [status, setStatus] = useState<'loading' | 'onboarding' | 'splash'>('loading');
+  const [status, setStatus] = useState<'splash' | 'onboarding'>('splash');
+  const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    let alive = true;
-    hasCompletedOnboarding().then((done) => {
-      if (alive) setStatus(done ? 'splash' : 'onboarding');
-    }).catch((error: unknown) => {
-      if (alive) {
-        console.warn('Could not read onboarding completion:', error);
-        Alert.alert('Welcome to Tarisira', 'We could not load your saved onboarding status. You can continue and try again.');
-        setStatus('onboarding');
-      }
-    });
-    return () => { alive = false; };
-  }, []);
-
-  const finishOnboarding = async (then?: 'language') => {
-    await completeOnboarding();
-    if (then === 'language') {
-      router.replace('/language');
-    } else {
-      setStatus('splash');
+    if (status === 'splash') {
+      Animated.timing(fade, { toValue: 1, duration: 900, useNativeDriver: true }).start();
     }
+  }, [status, fade]);
+
+  const finishOnboarding = async () => {
+    await completeOnboarding();
+    router.push('/language');
   };
 
-  if (status === 'loading') {
+  if (status === 'onboarding') {
     return (
-      <View style={{ flex: 1, backgroundColor: '#005F3C' }}>
-        <StatusBar style="light" />
-      </View>
+      <Onboarding
+        onBack={() => setStatus('splash')}
+        onSkip={finishOnboarding}
+        onGetStarted={finishOnboarding}
+      />
     );
   }
-
-  if (status === 'onboarding') {
-    return <Onboarding onSkip={() => finishOnboarding()} onGetStarted={() => finishOnboarding('language')} />;
-  }
-
-  return <SplashContent />;
-}
-
-function SplashContent() {
-  const fade = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(fade, { toValue: 1, duration: 900, useNativeDriver: true }).start();
-  }, [fade]);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#005F3C' }}>
@@ -84,7 +62,7 @@ function SplashContent() {
         </Animated.View>
 
         <View style={p.bottom}>
-          <Pressable style={p.cta} onPress={() => router.push('/language')}>
+          <Pressable style={p.cta} onPress={() => setStatus('onboarding')}>
             <Text style={p.ctaText}>Get Started — It's Free  →</Text>
           </Pressable>
           <Pressable style={p.ghost} onPress={() => router.push('/login')}>

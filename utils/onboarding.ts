@@ -1,7 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const ONBOARDING_KEY = 'tarisira_onboarding_v2';
+// Bump this key when the onboarding experience changes so existing installs
+// see the updated pages once instead of being treated as already onboarded.
+const ONBOARDING_KEY = 'tarisira_onboarding_v4';
 
 function storage() {
   if (Platform.OS === 'web') return globalThis.localStorage;

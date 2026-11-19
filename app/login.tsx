@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef } from 'react';
 import { Alert, Image, StyleSheet, View } from 'react-native';
 import { LocalizedText as Text } from '../components/LocalizedText';
 import { router } from 'expo-router';
@@ -6,12 +6,17 @@ import { Button, Field, PasswordField, Screen, s } from '../components/ui';
 import { C } from '../constants/theme';
 import { useApp } from '../context/AppContext';
 import { errorMessage } from '../utils/errors';
+import { useKeyboardAwareField } from '../utils/keyboard';
 
 export default function Login() {
   const { t, backendConfigured, signIn } = useApp();
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [identifier, setIdentifier] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const idRef = useRef<any>(null);
+  const pwdRef = useRef<any>(null);
+
+  useKeyboardAwareField();
   const doLogin = async () => {
     if (!backendConfigured) {
       router.replace('/home');
@@ -32,8 +37,8 @@ export default function Login() {
       <Image source={require('../assets/tarisira-logo-primary.png')} style={l.logo} resizeMode="contain" />
       <Text style={[s.h1, { marginTop: 24 }]}>{t.welcome}</Text>
       <Text style={s.sub}>{t.signin}</Text>
-      <Field label={t.phoneEmail} placeholder={t.phoneEmail} autoCapitalize="none" value={identifier} onChangeText={setIdentifier} keyboardType="email-address" />
-      <PasswordField label={t.password} placeholder={t.password} value={password} onChangeText={setPassword} />
+      <Field label={t.phoneEmail} placeholder={t.phoneEmail} autoCapitalize="none" value={identifier} onChangeText={setIdentifier} keyboardType="email-address" ref={idRef} />
+      <PasswordField label={t.password} placeholder={t.password} value={password} onChangeText={setPassword} ref={pwdRef} />
       <Text style={l.forgot} onPress={() => router.push('/forgot-password')}>{t.forgot}</Text>
       <Button label={busy ? 'Signing in…' : t.login} disabled={busy} onPress={() => void doLogin()} />
       <View style={l.orRow}><View style={l.orLine} /><Text style={l.orText}>{t.or}</Text><View style={l.orLine} /></View>

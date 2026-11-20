@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleProp, StyleSheet, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { AppIcon } from './AppIcon';
@@ -10,9 +10,8 @@ import { C, SERIF } from '../constants/theme';
 import { useApp } from '../context/AppContext';
 
 export function Screen({ children }: { children: ReactNode }) {
-  const insets = useSafeAreaInsets();
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -23,18 +22,17 @@ export function Screen({ children }: { children: ReactNode }) {
           ref={(ref) => { (globalThis as any).__tarisiraScrollRef = ref; }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          nestedScrollEnabled={false}
           contentContainerStyle={{
             flexGrow: 1,
             paddingHorizontal: 20,
-            paddingTop: insets.top + 16,
-            paddingBottom: insets.bottom + 20,
+            paddingTop: 16,
+            paddingBottom: 20,
           }}
         >
           {children}
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
